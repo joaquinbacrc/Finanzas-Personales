@@ -1,0 +1,25 @@
+{
+  "name": "finanzas-node",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "App de finanzas personales — backend Node.js + Express + SQLite, frontend HTML/CSS/JS premium",
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=.env src/server.ts",
+    "build": "tsc",
+    "start": "node --env-file-if-exists=.env dist/server.js",
+    "import": "tsx --env-file-if-exists=.env src/scripts/import-csv.ts"
+  },
+  "dependencies": {
+    "express": "^4.21.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.7.4",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2"
+  },
+  "engines": {
+    "node": ">=22.5"
+  }
+}
