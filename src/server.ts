@@ -3,6 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as svc from './services/finanzas.js';
 import { authMiddleware, loginHandler, logoutHandler, authEnabled } from './auth.js';
+import { importDbFile } from './db.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = resolve(__dirname, '../public');
@@ -97,6 +98,16 @@ app.get('/api/cierre/preview', wrap((_req, res) => {
 
 app.post('/api/cierre', wrap((req, res) => {
   res.json(svc.cerrarMes(String(req.body?.mes ?? ''), req.body?.anio, String(req.body?.fecha ?? '')));
+}));
+
+// Sube un archivo SQLite y reemplaza la DB (PROTEGIDO POR AUTH).
+// Body crudo (application/octet-stream), límite 50MB.
+app.post('/api/import-db', express.raw({ type: '*/*', limit: '50mb' }), wrap((req, res) => {
+  if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+    throw new Error('Body vacío. Mandá el archivo como application/octet-stream.');
+  }
+  const r = importDbFile(req.body);
+  res.json({ success: true, bytes: req.body.length, gastos: r.rows });
 }));
 
 // Error handler
