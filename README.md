@@ -2,6 +2,16 @@
 
 App de finanzas personales premium. Migración del proyecto original (Google Apps Script + Google Sheets) a un stack moderno de Node.js con persistencia local.
 
+> 🔵 **Si abrís este repo con Claude Code**, leé primero [CLAUDE.md](CLAUDE.md) — tiene todo el contexto de decisiones, deploy actual y plan futuro.
+
+## Estado actual
+
+- ✅ **En producción**: https://finanzas-personales-production-fec6.up.railway.app
+- ✅ Deployada en Railway con Dockerfile + volumen persistente
+- ✅ Datos reales de Mayo 2026 cargados (importados del Sheet original)
+- ✅ Multi-device: PWA instalable en iPhone/Android
+- 📅 **Plan futuro**: ver [ROADMAP.md](ROADMAP.md) — migración a Cloudflare con multi-app + multi-user.
+
 ## Stack
 
 - **Runtime**: Node.js 24 (requiere `>= 22.5` por el módulo `node:sqlite` built-in)
