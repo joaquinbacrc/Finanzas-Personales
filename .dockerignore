@@ -1,0 +1,14 @@
+node_modules
+dist
+data
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+.env
+.git
+.gitignore
+*.csv
+*.bat
+README.md
+DEPLOY.md
