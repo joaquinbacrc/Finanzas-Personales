@@ -1,11 +1,17 @@
+providers = ["node"]
+
 [phases.setup]
 nixPkgs = ["nodejs_22"]
 
 [phases.install]
-cmds = ["npm ci"]
+cmds = ["npm install --no-audit --no-fund --prefer-offline"]
 
 [phases.build]
 cmds = ["npm run build"]
 
 [start]
 cmd = "node dist/server.js"
+
+[variables]
+NPM_CONFIG_CACHE = "/tmp/.npm"
+NPM_CONFIG_UPDATE_NOTIFIER = "false"
