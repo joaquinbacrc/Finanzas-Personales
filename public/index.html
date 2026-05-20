@@ -359,12 +359,6 @@ input::placeholder{color:var(--ink4)}
 .autocat .ac-link{background:none;border:none;color:var(--accent);cursor:pointer;font-weight:600;padding:0 4px;font-family:var(--body);font-size:11px;text-decoration:underline}
 
 /* Heatmap */
-.hm-week-labels{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;font-size:10px;color:var(--ink3);text-align:center;font-weight:600;letter-spacing:1px;margin-bottom:6px}
-.hm-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
-.hm-cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;font-weight:500;color:var(--ink2);border-radius:6px;cursor:pointer;transition:.15s;border:1px solid transparent}
-.hm-cell:hover{transform:scale(1.06);box-shadow:var(--shadow-sm);border-color:var(--ink)}
-.hm-cell.empty{background:transparent !important;cursor:default;pointer-events:none;color:transparent}
-.hm-cell.today{outline:2px solid var(--accent);outline-offset:1px}
 
 /* Presupuestos */
 .presup-row{margin-bottom:14px}
@@ -526,14 +520,7 @@ input::placeholder{color:var(--ink4)}
 
     <div class="card" id="dashDonut" style="padding-bottom:10px;"></div>
 
-    <div class="card" id="heatmapCard" style="display:none">
-      <div class="card-title"><span class="icon">📅</span>Mapa del mes</div>
-      <div class="hm-week-labels"><div>L</div><div>M</div><div>X</div><div>J</div><div>V</div><div>S</div><div>D</div></div>
-      <div id="heatmapGrid" class="hm-grid"></div>
-      <div style="margin-top:10px;font-size:11px;color:var(--ink3);text-align:center">Tocá un día para filtrar la lista</div>
-    </div>
-
-    <div class="card" id="histCard" style="display:none">
+<div class="card" id="histCard" style="display:none">
       <div class="card-title"><span class="icon">📈</span>Evolución mensual</div>
       <div class="hist-chart"><svg id="histSvg" viewBox="0 0 600 220" preserveAspectRatio="none"></svg></div>
       <div class="hist-legend">
@@ -1085,55 +1072,6 @@ function aplicarUrlParams() {
 }
 
 // =============================================================================
-// Heatmap del mes
-// =============================================================================
-function renderHeatmap() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const firstDay = new Date(year, month, 1);
-  const lastDay = new Date(year, month + 1, 0);
-  const daysInMonth = lastDay.getDate();
-  const offsetSun = firstDay.getDay();           // Domingo=0
-  const offsetMon = (offsetSun + 6) % 7;          // Lunes=0
-
-  const byDay = {};
-  S.gastos.forEach(g => {
-    const fg = parseFechaGasto(g.fecha);
-    if (!fg || fg.getFullYear() !== year || fg.getMonth() !== month) return;
-    const d = fg.getDate();
-    byDay[d] = (byDay[d] || 0) + g.arsEquiv;
-  });
-  const max = Math.max(0, ...Object.values(byDay));
-  if (max === 0) { $('heatmapCard').style.display = 'none'; return; }
-  $('heatmapCard').style.display = 'block';
-
-  let html = '';
-  for (let i = 0; i < offsetMon; i++) html += '<div class="hm-cell empty"></div>';
-  const todayDay = now.getDate();
-  for (let day = 1; day <= daysInMonth; day++) {
-    const v = byDay[day] || 0;
-    const intensity = max > 0 ? v / max : 0;
-    let bg;
-    if (v === 0) bg = 'var(--bg2)';
-    else bg = `rgba(166,50,50,${0.18 + intensity * 0.55})`;
-    const cls = 'hm-cell' + (day === todayDay ? ' today' : '');
-    const safe = String(v).replace(/'/g, '');
-    html += `<div class="${cls}" style="background:${bg}" title="${day}: ${fmt(v)}" onclick="filtrarPorDia(${year},${month + 1},${day})">${day}</div>`;
-  }
-  $('heatmapGrid').innerHTML = html;
-}
-
-function filtrarPorDia(year, month, day) {
-  const ymd = year + '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0');
-  switchView('list');
-  $('fDesde').value = ymd;
-  $('fHasta').value = ymd;
-  applyFilters();
-  toast(`Filtrando ${day}/${month}/${year}`);
-}
-
-// =============================================================================
 // Comparativa de meses
 // =============================================================================
 function renderCompararMeses() {
@@ -1586,7 +1524,6 @@ function renderResumen() {
   const sorted = [...S.gastos].sort((a,b) => b.arsEquiv - a.arsEquiv).slice(0, 5);
   $('topGastos').innerHTML = sorted.map((g, i) => `<div class="top-item"><span class="rank">#${i+1}</span><div class="info"><div class="motivo">${esc(g.motivo)}${g.cuota ? ' <span class="cuota-tag">'+esc(g.cuota)+'</span>' : ''}</div><div class="src">${esc(g.imputar)} · ${esc(g.tipo)}</div></div><span class="amt">${fmt(g.arsEquiv)}</span></div>`).join('') || '<div style="text-align:center;padding:20px;color:var(--ink3);font-style:italic">Sin gastos</div>';
 
-  renderHeatmap();
   renderCompararMeses();
   renderPresupuestos();
 }
