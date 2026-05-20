@@ -654,8 +654,9 @@ let bulkSelected = new Set();
 const CHART_COLORS = ['#2A5680', '#2D6A4F', '#9C7F4E', '#A63232', '#7A918D', '#D9A05B', '#5A5751', '#B8B6AF'];
 
 const $ = id => document.getElementById(id);
-const fmt = n => { if(n==null||isNaN(n)) return '$0'; return '$' + Math.round(Number(n)).toLocaleString('es-AR'); };
+const fmt = n => { if(n==null||isNaN(n)) return '$0'; return '$' + Number(n).toLocaleString('es-AR',{maximumFractionDigits:2}); };
 const fmtUSD = n => { if(n==null||isNaN(n)) return 'U$0.00'; return 'U$' + Number(n).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2}); };
+const fmtExt = n => { if(n==null||isNaN(n)) return '0'; return Number(n).toLocaleString('es-AR',{maximumFractionDigits:2}); };
 const today = () => { const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
 const d2s = d => { if(!d) return ''; const p=d.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; };
 const s2d = s => { if(!s) return ''; const p=String(s).split('/'); if(p.length===3) return p[2]+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0'); return ''; };
@@ -887,7 +888,7 @@ function renderDash() {
         <div class="venc-item" onclick="marcarPagado(${g.row})">
           <div class="venc-check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="display:none;color:var(--green)"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
           <div class="venc-name">${esc(g.motivo)}</div>
-          <div class="venc-amt">${g.moneda!=='ARS' ? (g.moneda==='USD'?'U$':'€')+esc(g.montoExt) : fmt(g.arsEquiv)}</div>
+          <div class="venc-amt">${g.moneda!=='ARS' ? (g.moneda==='USD'?'U$':'€')+fmtExt(g.montoExt) : fmt(g.arsEquiv)}</div>
         </div>
       `).join('')}
     </div>`;
@@ -1308,7 +1309,7 @@ function applyFilters() {
   };
 
   f.forEach((g, index) => {
-    const m = g.moneda !== 'ARS' ? `<span class="amount-usd">${g.moneda === 'USD' ? 'U$' : '€'}${esc(g.montoExt)}</span>` : fmt(g.arsEquiv);
+    const m = g.moneda !== 'ARS' ? `<span class="amount-usd">${g.moneda === 'USD' ? 'U$' : '€'}${fmtExt(g.montoExt)}</span>` : fmt(g.arsEquiv);
     const delay = index * 0.02;
     const selectedClass = bulkSelected.has(g.row) ? ' selected' : '';
     const cardHtml = `
@@ -1501,7 +1502,7 @@ function verDetalleCategoria(cat) {
     const sub = porOrig[orig].reduce((a, g) => a + g.arsEquiv, 0);
     html += `<div style="margin-top:16px;margin-bottom:8px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1.2px;color:var(--ink3);border-bottom:1px solid var(--line);padding-bottom:4px;display:flex;justify-content:space-between"><span>${esc(orig)}</span><span>${fmt(sub)}</span></div><div class="top-list">`;
     porOrig[orig].forEach(g => {
-      const m = g.moneda !== 'ARS' ? `<span class="amount-usd">${g.moneda==='USD'?'U$':'€'}${esc(g.montoExt)}</span>` : fmt(g.arsEquiv);
+      const m = g.moneda !== 'ARS' ? `<span class="amount-usd">${g.moneda==='USD'?'U$':'€'}${fmtExt(g.montoExt)}</span>` : fmt(g.arsEquiv);
       html += `<div class="top-item" style="padding:6px 0;border:none"><div class="info"><div class="motivo" style="font-weight:500">${esc(g.motivo)}</div><div class="src">${esc(g.fecha)}</div></div><span class="amt" style="font-size:12px">${m}</span></div>`;
     });
     html += `</div>`;
