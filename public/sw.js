@@ -1,5 +1,5 @@
 // Service Worker mínimo: cache de assets estáticos, network-first para /api/.
-const CACHE = 'finanzas-v1';
+const CACHE = 'finanzas-v2';
 const ASSETS = ['/', '/index.html', '/login.html', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', (e) => {
