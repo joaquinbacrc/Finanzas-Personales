@@ -1,0 +1,12 @@
+name = "finanzas-personales"
+main = "worker.js"
+compatibility_date = "2025-05-15"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "finanzas"
+database_id = "95b026e8-bb6e-40c0-94d3-5addd2d04041"
