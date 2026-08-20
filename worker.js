@@ -1,3 +1,19 @@
+// ============================================================================
+// ESTE ARCHIVO ES EL FUENTE DE PRODUCCION. Editalo a mano.
+//
+// wrangler.toml apunta a main = "worker.js": Cloudflare sirve ESTE archivo.
+//
+// Es un bundle de esbuild de una version async/D1 cuyos fuentes NO estan en el
+// repo (fijate en la marca "// src/worker.ts" mas abajo: ese archivo no existe ni
+// figura en el historial de git). Los src/*.ts que si estan son la version
+// SINCRONA de Express + node:sqlite del deploy viejo de Railway, que esta muerto.
+//
+// NO regeneres este archivo con esbuild desde src/: produciria codigo sincrono de
+// node:sqlite corriendo en Workers y la app se cae entera.
+//
+// Si cambias logica compartida, aplicala en los dos lados y corre `npm run
+// check:worker`, que avisa cuando se toco src/ sin tocar este archivo.
+// ============================================================================
 var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 
