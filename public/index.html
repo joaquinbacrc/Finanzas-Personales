@@ -1854,7 +1854,11 @@ document.addEventListener('DOMContentLoaded', init);
 // Service Worker (PWA)
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
+    navigator.serviceWorker.register('/sw.js').then((reg) => {
+      // Forzar chequeo de version en cada carga, para que un fix del SW
+      // llegue al celular sin esperar y sin que el usuario haga nada.
+      reg.update().catch(() => {});
+    }).catch(() => {});
   });
 }
 
