@@ -473,6 +473,7 @@ async function previewCierreMes(db) {
   };
 }
 __name(previewCierreMes, "previewCierreMes");
+var TITULO_PREFIJO = "\u{1F4B0} FINANZAS PERSONALES \u2014 ";
 async function cerrarMes(db, nuevoMes, nuevoAnio, nuevaFechaCierre) {
   if (!MESES.includes(nuevoMes))
     throw new Error("Mes inv\xE1lido");
@@ -480,6 +481,13 @@ async function cerrarMes(db, nuevoMes, nuevoAnio, nuevaFechaCierre) {
   const tcUSD = num(settings["tc_usd"]) || 1400;
   const tcEUR = num(settings["tc_eur"]) || 1500;
   const tituloActual = settings["titulo"] || "";
+  // Poka-yoke: el 31/07/2026 se cerro "Julio 2026" eligiendo "Julio" otra vez como
+  // mes nuevo. El rotulo quedo clavado y agosto se cargo dentro de un mes llamado
+  // julio. Un error de dedo no puede volver a desordenar meses de datos.
+  const mesActual = tituloActual.replace(TITULO_PREFIJO, "").trim();
+  if (mesActual && mesActual.toLowerCase() === `${nuevoMes} ${nuevoAnio}`.trim().toLowerCase()) {
+    throw new Error(`El mes nuevo no puede ser el mismo que el actual (${mesActual}). Elegi el mes siguiente.`);
+  }
   const sueldo = num(ingresos[1]);
   const mp = num(ingresos[2]);
   const nubi = num(ingresos[3]);
@@ -533,7 +541,7 @@ async function cerrarMes(db, nuevoMes, nuevoAnio, nuevaFechaCierre) {
     INSERT INTO historico (mes, ingresos, gastos, margen, pct_variable, sobrante_nubi, sobrante_mp)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `).bind(
-    tituloActual.replace("\u{1F4B0} FINANZAS PERSONALES \u2014 ", ""),
+    tituloActual.replace(TITULO_PREFIJO, ""),
     totalIngresos,
     totalGastos,
     totalIngresos - totalGastos,
@@ -541,7 +549,12 @@ async function cerrarMes(db, nuevoMes, nuevoAnio, nuevaFechaCierre) {
     sobranteNUBI,
     sobranteMP
   );
-  const wipeGastos = db.prepare(`DELETE FROM gastos`);
+  // Borramos SOLO los ids que acabamos de contabilizar en el historico, no "todo",
+  // y en su propia operacion verificada. El wipe global funcionaba (verificado en la
+  // base real: el cierre de junio limpio bien), pero borraba a ciegas: cualquier gasto
+  // cargado entre la lectura de arriba y este punto se iba sin haber sido contabilizado.
+  // Borrar por id no puede llevarse lo que no conto.
+  const idsContabilizados = rows.map((r) => r.id).filter((id) => id != null);
   const insertGastoStmt = db.prepare(`
     INSERT INTO gastos (fecha, motivo, monto_ars, moneda, monto_ext, imputar, tipo, cuota, categoria, estado, notas)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -567,11 +580,33 @@ async function cerrarMes(db, nuevoMes, nuevoAnio, nuevaFechaCierre) {
   `).bind(key, value), "upsertSetting");
   const settingStmts = [
     upsertSetting("tenencia_usd", String(Math.round(sobranteUSD * 100) / 100)),
-    upsertSetting("titulo", `\u{1F4B0} FINANZAS PERSONALES \u2014 ${nuevoMes} ${nuevoAnio}`)
+    upsertSetting("titulo", `${TITULO_PREFIJO}${nuevoMes} ${nuevoAnio}`)
   ];
   if (nuevaFechaCierre)
     settingStmts.push(upsertSetting("cierre_tarjeta", nuevaFechaCierre));
-  await db.batch([insertHist, wipeGastos, ...insertGastos, updMP, updNUBI, ...settingStmts]);
+  // El orden importa. Primero insertamos los fijos del mes nuevo: llevan ids nuevos,
+  // que no estan en idsContabilizados y por lo tanto sobreviven al DELETE de abajo.
+  // Despues borramos lo viejo. El historico se escribe AL FINAL, para que ningun
+  // fallo intermedio pueda dejar gastos borrados sin su respaldo en historico.
+  if (insertGastos.length) await db.batch(insertGastos);
+
+  let borrados = 0;
+  for (let i = 0; i < idsContabilizados.length; i += 90) {
+    const chunk = idsContabilizados.slice(i, i + 90);
+    const res = await db.prepare(
+      `DELETE FROM gastos WHERE id IN (${chunk.map(() => "?").join(",")})`
+    ).bind(...chunk).run();
+    borrados += res.meta?.changes ?? 0;
+  }
+  if (borrados !== idsContabilizados.length) {
+    // Abortamos ANTES de escribir el historico. Puede quedar una tanda de fijos
+    // duplicada, que es molesto pero reversible; perder gastos no lo seria.
+    throw new Error(
+      `Cierre abortado: se esperaba borrar ${idsContabilizados.length} gastos y se borraron ${borrados}. No se escribio el historico, se puede reintentar.`
+    );
+  }
+
+  await db.batch([insertHist, updMP, updNUBI, ...settingStmts]);
   return {
     success: true,
     sobranteMP,

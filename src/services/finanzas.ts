@@ -348,12 +348,19 @@ export function previewCierreMes() {
   };
 }
 
+const TITULO_PREFIJO = '💰 FINANZAS PERSONALES — ';
 export function cerrarMes(nuevoMes: string, nuevoAnio: string | number, nuevaFechaCierre: string) {
   if (!MESES.includes(nuevoMes)) throw new Error('Mes inválido');
 
   const tcUSD = num(getSetting('tc_usd')) || 1400;
   const tcEUR = num(getSetting('tc_eur')) || 1500;
   const tituloActual = getSetting('titulo') || '';
+  // Poka-yoke: el 31/07/2026 se cerro "Julio 2026" eligiendo "Julio" otra vez como mes
+  // nuevo. El rotulo quedo clavado y agosto se cargo dentro de un mes llamado julio.
+  const mesActual = tituloActual.replace(TITULO_PREFIJO, '').trim();
+  if (mesActual && mesActual.toLowerCase() === `${nuevoMes} ${nuevoAnio}`.trim().toLowerCase()) {
+    throw new Error(`El mes nuevo no puede ser el mismo que el actual (${mesActual}). Elegí el mes siguiente.`);
+  }
 
   const sueldo = num((db.prepare(`SELECT monto FROM ingresos WHERE id = 1`).get() as any)?.monto);
   const mp = num((db.prepare(`SELECT monto FROM ingresos WHERE id = 2`).get() as any)?.monto);
@@ -415,7 +422,7 @@ export function cerrarMes(nuevoMes: string, nuevoAnio: string | number, nuevaFec
   withTransaction(() => {
     db.prepare(`INSERT INTO historico (mes, ingresos, gastos, margen, pct_variable, sobrante_nubi, sobrante_mp) VALUES (?, ?, ?, ?, ?, ?, ?)`)
       .run(
-        tituloActual.replace('💰 FINANZAS PERSONALES — ', ''),
+        tituloActual.replace(TITULO_PREFIJO, ''),
         totalIngresos,
         totalGastos,
         totalIngresos - totalGastos,
@@ -424,7 +431,15 @@ export function cerrarMes(nuevoMes: string, nuevoAnio: string | number, nuevaFec
         sobranteMP
       );
 
-    db.prepare(`DELETE FROM gastos`).run();
+    // Borramos SOLO los ids que acabamos de contabilizar, no "todo". El wipe global
+    // funcionaba, pero borraba a ciegas: un gasto cargado entre la lectura de arriba y
+    // este punto se iba sin haber sido contabilizado en el histórico. Borrar por id no
+    // puede llevarse lo que no contó. Mismo criterio en worker.js (el que corre en prod).
+    const idsContabilizados = rows.map(r => r.id).filter(id => id != null);
+    for (let i = 0; i < idsContabilizados.length; i += 90) {
+      const chunk = idsContabilizados.slice(i, i + 90);
+      db.prepare(`DELETE FROM gastos WHERE id IN (${chunk.map(() => '?').join(',')})`).run(...chunk);
+    }
     const ins = db.prepare(`
       INSERT INTO gastos (fecha, motivo, monto_ars, moneda, monto_ext, imputar, tipo, cuota, categoria, estado, notas)
       VALUES (@fecha, @motivo, @monto_ars, @moneda, @monto_ext, @imputar, @tipo, @cuota, @categoria, @estado, @notas)
@@ -434,7 +449,7 @@ export function cerrarMes(nuevoMes: string, nuevoAnio: string | number, nuevaFec
     db.prepare(`UPDATE ingresos SET monto = ? WHERE id = 2`).run(Math.round(mp + sobranteMP));
     db.prepare(`UPDATE ingresos SET monto = ? WHERE id = 3`).run(Math.round(nubi + sobranteNUBI));
     setSettingValue('tenencia_usd', String(Math.round(sobranteUSD * 100) / 100));
-    setSettingValue('titulo', `💰 FINANZAS PERSONALES — ${nuevoMes} ${nuevoAnio}`);
+    setSettingValue('titulo', `${TITULO_PREFIJO}${nuevoMes} ${nuevoAnio}`);
     if (nuevaFechaCierre) setSettingValue('cierre_tarjeta', nuevaFechaCierre);
   });
 
