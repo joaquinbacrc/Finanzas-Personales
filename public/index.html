@@ -597,6 +597,17 @@ input::placeholder{color:var(--ink4)}
       <div class="toggle-row"><span style="font-size:14px;color:var(--ink2);font-weight:500">Modo oscuro</span><div class="toggle" id="darkToggle" onclick="toggleDark()"></div></div>
     </div>
 
+    <div class="divider-fancy"><span>datos</span></div>
+
+    <div class="card">
+      <div class="card-title"><span class="icon">⤓</span>Exportar a CSV</div>
+      <div style="font-size:13px;color:var(--ink2);line-height:1.6;margin-bottom:12px">
+        Baja los gastos del mes en curso a un archivo. Conviene hacerlo <strong>antes de cerrar el mes</strong>:
+        el cierre guarda solo el resumen del mes y borra el detalle de cada gasto.
+      </div>
+      <button class="btn btn-secondary" onclick="exportCSV()">Descargar CSV del mes</button>
+    </div>
+
     <div class="divider-fancy"><span>cierre de mes</span></div>
 
     <div class="card"><div class="card-title"><span class="icon">●</span>Cerrar mes</div>

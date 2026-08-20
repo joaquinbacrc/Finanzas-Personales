@@ -6,11 +6,14 @@ App de finanzas personales premium. Migración del proyecto original (Google App
 
 ## Estado actual
 
-- ✅ **En producción**: https://finanzas-personales-production-fec6.up.railway.app
-- ✅ Deployada en Railway con Dockerfile + volumen persistente
-- ✅ Datos reales de Mayo 2026 cargados (importados del Sheet original)
+- ✅ **En producción**: https://finanzas-personales.omnia-ar.workers.dev
+- ✅ Deployada en **Cloudflare Workers + D1**, por Workers Builds en cada push (~40 s)
+- ⚠️ **Railway está muerto** (404). Fue el deploy original; el `Dockerfile` y `railway.json`
+  quedaron de esa etapa. La migración a Cloudflare que figura en el ROADMAP **ya pasó**.
+- ✅ Datos reales cargados y en uso
 - ✅ Multi-device: PWA instalable en iPhone/Android
-- 📅 **Plan futuro**: ver [ROADMAP.md](ROADMAP.md) — migración a Cloudflare con multi-app + multi-user.
+- ⚠️ **La D1 es la única copia de los datos** — no hay backup en archivo. Red de seguridad:
+  D1 Time Travel (30 días). Ver [CLAUDE.md](CLAUDE.md#backup).
 
 ## Stack
 
