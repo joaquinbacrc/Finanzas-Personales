@@ -185,7 +185,11 @@ lógica y para correr local, pero **editarlo no cambia producción**.
 - [src/scripts/import-csv.ts](src/scripts/import-csv.ts) — importador del CSV del Sheet original
 - [Dockerfile](Dockerfile) + [railway.json](railway.json) — deploy de Railway, muerto
 - [DEPLOY.md](DEPLOY.md) — guía de deploy de Railway, obsoleta
-- [ROADMAP.md](ROADMAP.md) — la migración a Cloudflare que describe **ya pasó**
+- [ROADMAP.md](ROADMAP.md) — migrar **las otras 8 apps** de Apps Script a Cloudflare con
+  multi-app + multi-user. **No confundir**: que *esta* app esté en Cloudflare no significa que
+  el roadmap se haya hecho. ⚠️ Verificar igual si sigue vigente: varias de esas apps
+  (Control de Stock, Producción, Mantenimiento, Arte, Merma, Proyectos) parecen vivir hoy como
+  módulos del Panel ZECAT, por una vía distinta a la que este roadmap plantea
 
 ## El service worker no intercepta navegaciones (a propósito)
 
