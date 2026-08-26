@@ -88,10 +88,6 @@ app.post('/api/plantillas', wrap((req, res) => {
   res.json(svc.savePlantillas(req.body?.plantillas ?? []));
 }));
 
-app.post('/api/presupuestos', wrap((req, res) => {
-  res.json(svc.savePresupuestos(req.body?.presupuestos ?? {}));
-}));
-
 app.get('/api/cierre/preview', wrap((_req, res) => {
   res.json(svc.previewCierreMes());
 }));

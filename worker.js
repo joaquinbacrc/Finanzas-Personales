@@ -17,6 +17,10 @@
 var __defProp = Object.defineProperty;
 var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
 
+// Zona horaria del usuario. El Worker corre en UTC, asi que cualquier cuenta de dias
+// calendario tiene que resolverse contra esta zona y no contra la del runtime.
+var TZ_USUARIO = "America/Argentina/Buenos_Aires";
+
 // src/auth.ts
 var COOKIE = "fin_auth";
 var MAX_AGE = 60 * 60 * 24 * 30;
@@ -211,7 +215,6 @@ async function getAllData(db) {
   const origenes = JSON.parse(settings["origenes"] || "[]");
   const categorias = JSON.parse(settings["categorias"] || "[]");
   const plantillas = JSON.parse(settings["plantillas"] || "[]");
-  const presupuestos = JSON.parse(settings["presupuestos"] || "{}");
   return {
     titulo,
     tc: tcUSD,
@@ -225,8 +228,7 @@ async function getAllData(db) {
     tipos: ["Fijo", "Variable"],
     dashboard,
     historico,
-    plantillas,
-    presupuestos
+    plantillas
   };
 }
 __name(getAllData, "getAllData");
@@ -258,11 +260,20 @@ function computeDashboard(gastos, ingresos, tenenciaUSD, tcUSD, cierreStr, histo
   if (cierreStr && cierreStr.includes("/")) {
     const p = cierreStr.split("/");
     if (p.length === 3) {
-      const cierreDate = new Date(parseInt(p[2]), parseInt(p[1]) - 1, parseInt(p[0]));
-      const hoy = /* @__PURE__ */ new Date();
-      hoy.setHours(0, 0, 0, 0);
-      cierreDate.setHours(0, 0, 0, 0);
-      diasHastaCierre = Math.max(Math.ceil((cierreDate.getTime() - hoy.getTime()) / 864e5), 1);
+      // Dos cosas que antes estaban mal en esta cuenta:
+      // 1) HOY CUENTA. Si el cierre es manana, quedan hoy y manana = 2 dias. Antes se
+      //    hacia cierre - hoy, que daba 1 y por lo tanto DUPLICABA el ppto diario.
+      // 2) El Worker corre en UTC. Con new Date() pelado, a partir de las 21:00 de
+      //    Argentina ya era "manana" alla y la cuenta se corria un dia mas.
+      const hoyAR = new Intl.DateTimeFormat("en-CA", {
+        timeZone: TZ_USUARIO,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+      }).format(/* @__PURE__ */ new Date()).split("-").map(Number);
+      const hoyUTC = Date.UTC(hoyAR[0], hoyAR[1] - 1, hoyAR[2]);
+      const cierreUTC = Date.UTC(parseInt(p[2]), parseInt(p[1]) - 1, parseInt(p[0]));
+      diasHastaCierre = Math.max(Math.round((cierreUTC - hoyUTC) / 864e5) + 1, 1);
       pptoDia = Math.round(margen / diasHastaCierre);
     }
   }
@@ -421,13 +432,6 @@ async function savePlantillas(db, arr) {
   return { success: true };
 }
 __name(savePlantillas, "savePlantillas");
-async function savePresupuestos(db, obj) {
-  if (!obj || typeof obj !== "object")
-    throw new Error("Inv\xE1lido");
-  await setSettingValue(db, "presupuestos", JSON.stringify(obj));
-  return { success: true };
-}
-__name(savePresupuestos, "savePresupuestos");
 var MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 async function loadCierreState(db) {
   const [settingsArr, ingresosArr, gastosArr] = await Promise.all([
@@ -739,10 +743,7 @@ async function handleApi(req, env, path, method) {
     const body = await readJson(req);
     return json(await savePlantillas(db, body.plantillas ?? []));
   }
-  if (path === "/api/presupuestos" && method === "POST") {
-    const body = await readJson(req);
-    return json(await savePresupuestos(db, body.presupuestos ?? {}));
-  }
+
   if (path === "/api/cierre/preview" && method === "GET") {
     return json(await previewCierreMes(db));
   }

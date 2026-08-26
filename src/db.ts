@@ -78,7 +78,6 @@ function openDb() {
     ['origenes', JSON.stringify(DEFAULT_ORIGENES)],
     ['categorias', JSON.stringify(DEFAULT_CATEGORIAS)],
     ['plantillas', '[]'],
-    ['presupuestos', '{}'],
   ];
   for (const [k, v] of seedSettings) setSetting.run(k, v);
 

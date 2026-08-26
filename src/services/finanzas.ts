@@ -111,7 +111,6 @@ export function getAllData() {
   const origenes: string[] = JSON.parse(getSetting('origenes') || '[]');
   const categorias: string[] = JSON.parse(getSetting('categorias') || '[]');
   const plantillas: Plantilla[] = JSON.parse(getSetting('plantillas') || '[]');
-  const presupuestos: Record<string, number> = JSON.parse(getSetting('presupuestos') || '{}');
 
   return {
     titulo,
@@ -127,7 +126,6 @@ export function getAllData() {
     dashboard,
     historico,
     plantillas,
-    presupuestos,
   };
 }
 
@@ -155,9 +153,12 @@ function computeDashboard(gastos: Gasto[], ingresos: Ingreso[], tenenciaUSD: num
   if (cierreStr && cierreStr.includes('/')) {
     const p = cierreStr.split('/');
     if (p.length === 3) {
+      // HOY CUENTA: si el cierre es mañana, quedan hoy y mañana = 2 días. Antes se hacía
+      // cierre - hoy, daba 1 y duplicaba el ppto diario. Mismo criterio en worker.js, que
+      // además fuerza la zona horaria del usuario porque corre en UTC.
       const cierreDate = new Date(parseInt(p[2]!), parseInt(p[1]!) - 1, parseInt(p[0]!));
       const hoy = new Date(); hoy.setHours(0, 0, 0, 0); cierreDate.setHours(0, 0, 0, 0);
-      diasHastaCierre = Math.max(Math.ceil((cierreDate.getTime() - hoy.getTime()) / 86400000), 1);
+      diasHastaCierre = Math.max(Math.round((cierreDate.getTime() - hoy.getTime()) / 86400000) + 1, 1);
       pptoDia = Math.round(margen / diasHastaCierre);
     }
   }
@@ -299,16 +300,6 @@ export function savePlantillas(arr: Plantilla[]) {
   return { success: true };
 }
 
-export function savePresupuestos(obj: Record<string, number>) {
-  if (!obj || typeof obj !== 'object') throw new Error('Inválido');
-  setSettingValue('presupuestos', JSON.stringify(obj));
-  return { success: true };
-}
-
-// --- Cierre de mes ---
-
-const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-
 export function previewCierreMes() {
   const tcUSD = num(getSetting('tc_usd')) || 1400;
   const tcEUR = num(getSetting('tc_eur')) || 1500;
@@ -347,6 +338,10 @@ export function previewCierreMes() {
     gastosCount: data.length,
   };
 }
+
+// --- Cierre de mes ---
+
+const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
 const TITULO_PREFIJO = '💰 FINANZAS PERSONALES — ';
 export function cerrarMes(nuevoMes: string, nuevoAnio: string | number, nuevaFechaCierre: string) {

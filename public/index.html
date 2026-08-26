@@ -47,8 +47,7 @@
         saveOrigenes:         (origenes)          => req('POST',   '/api/origenes', { origenes }),
         saveCategorias:       (categorias)        => req('POST',   '/api/categorias', { categorias }),
         savePlantillas:       (plantillas)        => req('POST',   '/api/plantillas', { plantillas }),
-        savePresupuestos:     (presupuestos)      => req('POST',   '/api/presupuestos', { presupuestos }),
-        previewCierreMes:     ()                  => req('GET',    '/api/cierre/preview'),
+              previewCierreMes:     ()                  => req('GET',    '/api/cierre/preview'),
         cerrarMes:            (mes, anio, fecha)  => req('POST',   '/api/cierre', { mes, anio, fecha }),
       };
 
@@ -360,17 +359,6 @@ input::placeholder{color:var(--ink4)}
 
 /* Heatmap */
 
-/* Presupuestos */
-.presup-row{margin-bottom:14px}
-.presup-row:last-child{margin-bottom:0}
-.presup-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
-.presup-name{font-size:13px;font-weight:500;color:var(--ink2)}
-.presup-val{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--ink)}
-.presup-val.over{color:var(--red)}
-.presup-bar{height:6px;background:var(--bg2);border-radius:3px;overflow:hidden}
-.presup-fill{height:100%;background:var(--accent);transition:width .5s cubic-bezier(.4,0,.2,1)}
-.presup-fill.over{background:var(--red)}
-
 /* Outliers */
 .outlier-row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--line);cursor:pointer;gap:10px}
 .outlier-row:last-child{border:none}
@@ -545,7 +533,6 @@ input::placeholder{color:var(--ink4)}
     <div class="divider-fancy"><span>top 5 gastos</span></div>
     <div class="card"><div class="card-title"><span class="icon">★</span>Más altos del mes</div><div class="top-list" id="topGastos"></div></div>
 
-    <div class="card" id="presupCard" style="display:none"></div>
   </div>
 
   <div class="view" id="v-config">
@@ -578,21 +565,6 @@ input::placeholder{color:var(--ink4)}
     </div>
 
     <div class="card">
-      <div class="card-title"><span class="icon">🎯</span>Presupuestos por categoría</div>
-      <div id="cfgPresupuestos"></div>
-      <div style="font-size:11px;color:var(--ink3);margin-top:8px;font-style:italic">Dejá vacío para sin límite. El progreso aparece en Resumen.</div>
-    </div>
-
-    <div class="card">
-      <div class="card-title"><span class="icon">🔗</span>Atajo rápido (Shortcut iOS / Android)</div>
-      <div style="font-size:13px;color:var(--ink2);line-height:1.6">
-        Podés cargar gastos pre-llenados con una URL:
-        <div style="background:var(--bg2);border-radius:6px;padding:10px;margin-top:8px;font-family:var(--mono);font-size:11px;word-break:break-all" id="urlEjemplo"></div>
-        <div style="margin-top:8px;font-size:11px;color:var(--ink3)">Parámetros: motivo, monto, moneda, imputar, tipo, categoria, cuota, notas, fecha (YYYY-MM-DD)</div>
-      </div>
-    </div>
-
-    <div class="card">
       <div class="card-title"><span class="icon">🌙</span>Apariencia</div>
       <div class="toggle-row"><span style="font-size:14px;color:var(--ink2);font-weight:500">Modo oscuro</span><div class="toggle" id="darkToggle" onclick="toggleDark()"></div></div>
     </div>
@@ -611,7 +583,11 @@ input::placeholder{color:var(--ink4)}
     <div class="divider-fancy"><span>cierre de mes</span></div>
 
     <div class="card"><div class="card-title"><span class="icon">●</span>Cerrar mes</div>
-      <div class="form-row" style="margin-bottom:10px"><select id="cfgMes"><option>Enero</option><option>Febrero</option><option>Marzo</option><option>Abril</option><option>Mayo</option><option>Junio</option><option>Julio</option><option>Agosto</option><option>Septiembre</option><option>Octubre</option><option>Noviembre</option><option>Diciembre</option></select><input type="number" id="cfgAnio" value="2026" inputmode="numeric"></div>
+      <div id="cierreResumen" style="font-size:13px;color:var(--ink2);line-height:1.6;margin-bottom:12px"></div>
+      <div class="form-group" style="margin-bottom:10px"><label>Mes que se abre</label>
+        <div class="form-row"><select id="cfgMes" onchange="chequearMesCierre()"><option>Enero</option><option>Febrero</option><option>Marzo</option><option>Abril</option><option>Mayo</option><option>Junio</option><option>Julio</option><option>Agosto</option><option>Septiembre</option><option>Octubre</option><option>Noviembre</option><option>Diciembre</option></select><input type="number" id="cfgAnio" inputmode="numeric" onchange="chequearMesCierre()"></div>
+        <div id="cierreAviso" style="font-size:12px;color:var(--red);margin-top:8px;display:none"></div>
+      </div>
       <div class="form-group" style="margin-bottom:10px"><label>Próximo cierre tarjeta</label><input type="date" id="cfgNuevoCierre"></div>
       <button class="btn btn-danger" onclick="cerrarMesFront()">Ver preview y cerrar</button>
     </div>
@@ -644,7 +620,7 @@ input::placeholder{color:var(--ink4)}
 // =============================================================================
 // Estado y helpers
 // =============================================================================
-let S = {gastos:[],ingresos:[],tc:1400,tcEUR:1500,tcFecha:'',cierreTarjeta:'',dashboard:{},origenes:[],categorias:[],titulo:'',historico:[],gastosMesAnterior:0,plantillas:[],presupuestos:{}};
+let S = {gastos:[],ingresos:[],tc:1400,tcEUR:1500,tcFecha:'',cierreTarjeta:'',dashboard:{},origenes:[],categorias:[],titulo:'',historico:[],gastosMesAnterior:0,plantillas:[]};
 let editRow = null;
 let gastoPendiente = null;
 let bulkMode = false;
@@ -761,7 +737,6 @@ function onData(d) {
   S.titulo = d.titulo || '';
   S.historico = d.historico || [];
   S.plantillas = d.plantillas || [];
-  S.presupuestos = d.presupuestos || {};
 
   $('nFecha').value = today();
   $('nImputar').innerHTML = S.origenes.map(o => `<option>${esc(o)}</option>`).join('');
@@ -830,7 +805,11 @@ function recalcDashboard() {
     if (p.length === 3) {
       const cd = new Date(+p[2], +p[1]-1, +p[0]);
       const hoy = new Date(); hoy.setHours(0,0,0,0); cd.setHours(0,0,0,0);
-      diasHastaCierre = Math.max(Math.ceil((cd - hoy)/86400000), 1);
+      // HOY CUENTA: si el cierre es manana, quedan hoy y manana = 2 dias. Antes se
+      // hacia cierre - hoy, daba 1 y por lo tanto DUPLICABA el ppto diario. Aca
+      // new Date() es hora local del navegador, que ya es la del usuario; el backend
+      // hace lo mismo pero forzando la zona horaria, porque corre en UTC.
+      diasHastaCierre = Math.max(Math.round((cd - hoy)/86400000) + 1, 1);
       pptoDia = Math.round(margen / diasHastaCierre);
     }
   }
@@ -1124,59 +1103,6 @@ function compararMeses() {
     row('% Variable', a.pctVariable, b.pctVariable, true);
 }
 
-// =============================================================================
-// Presupuestos
-// =============================================================================
-function renderPresupuestos() {
-  const presup = S.presupuestos || {};
-  const cats = Object.keys(presup).filter(c => Number(presup[c]) > 0);
-  if (!cats.length) { $('presupCard').style.display = 'none'; return; }
-  $('presupCard').style.display = 'block';
-
-  const totalPorCat = {};
-  S.gastos.forEach(g => { totalPorCat[g.categoria] = (totalPorCat[g.categoria] || 0) + g.arsEquiv; });
-
-  const rows = cats.map(c => {
-    const limit = Number(presup[c]);
-    const used = totalPorCat[c] || 0;
-    const pct = Math.min((used / limit) * 100, 100);
-    const over = used > limit;
-    return `
-      <div class="presup-row">
-        <div class="presup-head">
-          <span class="presup-name">${esc(c)}</span>
-          <span class="presup-val ${over ? 'over' : ''}">${fmt(used)} / ${fmt(limit)}</span>
-        </div>
-        <div class="presup-bar"><div class="presup-fill ${over ? 'over' : ''}" style="width:${pct}%"></div></div>
-      </div>`;
-  }).join('');
-  $('presupCard').innerHTML = `<div class="card-title"><span class="icon">🎯</span>Presupuestos</div>${rows}`;
-}
-
-function renderPresupuestosConfig() {
-  const list = $('cfgPresupuestos');
-  if (!list) return;
-  const presup = S.presupuestos || {};
-  list.innerHTML = S.categorias.map(c => {
-    const safe = esc(c).replace(/'/g, "\\'");
-    return `
-      <div class="ingreso-row">
-        <span class="ing-label">${esc(c)}</span>
-        <input type="text" inputmode="decimal" placeholder="—" value="${esc(presup[c] || '')}" onchange="setPresupuesto('${safe}', this.value)">
-      </div>`;
-  }).join('');
-}
-
-function setPresupuesto(cat, val) {
-  const parsed = parseAmount(val);
-  const v = isNaN(parsed) ? 0 : parsed;
-  if (!S.presupuestos) S.presupuestos = {};
-  const old = S.presupuestos[cat];
-  if (v === 0) delete S.presupuestos[cat]; else S.presupuestos[cat] = v;
-  renderPresupuestos();
-  google.script.run.withFailureHandler(e => { if (old != null) S.presupuestos[cat] = old; else delete S.presupuestos[cat]; renderPresupuestos(); toast(e.message, false); }).savePresupuestos(S.presupuestos);
-}
-
 function toggleExp(row) {
   const div = $('exp-' + row);
   if (!div) return;
@@ -1379,14 +1305,8 @@ function renderConfig() {
   $('cfgCategoriasList').innerHTML = S.categorias.map(c => `<span class="tag-chip">${esc(c)}<button onclick="quitarCategoria('${esc(c).replace(/'/g,"\\'")}')">×</button></span>`).join('') || '<em style="color:var(--ink3);font-size:13px">— sin categorías —</em>';
 
   renderPlantillasConfig();
-  renderPresupuestosConfig();
+  autocompletarCierre();
 
-  // Ejemplo de URL para Shortcut
-  const urlEjEl = $('urlEjemplo');
-  if (urlEjEl) {
-    const baseUrl = window.location.href.split('?')[0];
-    urlEjEl.textContent = baseUrl + '?motivo=Uber&monto=5000&imputar=MP&tipo=Variable&categoria=Transporte';
-  }
 }
 
 function agregarOrigen() {
@@ -1536,7 +1456,6 @@ function renderResumen() {
   $('topGastos').innerHTML = sorted.map((g, i) => `<div class="top-item"><span class="rank">#${i+1}</span><div class="info"><div class="motivo">${esc(g.motivo)}${g.cuota ? ' <span class="cuota-tag">'+esc(g.cuota)+'</span>' : ''}</div><div class="src">${esc(g.imputar)} · ${esc(g.tipo)}</div></div><span class="amt">${fmt(g.arsEquiv)}</span></div>`).join('') || '<div style="text-align:center;padding:20px;color:var(--ink3);font-style:italic">Sin gastos</div>';
 
   renderCompararMeses();
-  renderPresupuestos();
 }
 
 function renderHistChart() {
@@ -1758,6 +1677,43 @@ function agregarRendimiento() {
 // =============================================================================
 // Cierre de mes con preview
 // =============================================================================
+// El selector elige el mes que SE ABRE, no el que se cierra, y arrancaba siempre en
+// "Enero": habia que acertarlo a mano. Asi se cerro "Julio 2026" eligiendo Julio otra vez
+// el 31/07/2026: el rotulo quedo clavado y agosto entero se cargo dentro de un mes
+// llamado julio. Ahora se autocompleta con el mes siguiente y se dice cual se cierra.
+const MESES_UI = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+function mesActualDelTitulo() {
+  const t = (S.titulo || '').replace(/^[\s\S]*?—\s*/, '').trim();
+  const m = t.match(/^(\S+)\s+(\d{4})$/);
+  if (!m) return null;
+  const idx = MESES_UI.findIndex(x => x.toLowerCase() === m[1].toLowerCase());
+  return idx === -1 ? null : { texto: t, idx, anio: +m[2] };
+}
+
+function autocompletarCierre() {
+  const resumen = $('cierreResumen');
+  const act = mesActualDelTitulo();
+  if (!act) { if (resumen) resumen.textContent = ''; return; }
+  const sigIdx = (act.idx + 1) % 12;
+  $('cfgMes').value = MESES_UI[sigIdx];
+  $('cfgAnio').value = act.anio + (sigIdx === 0 ? 1 : 0);
+  if (resumen) resumen.innerHTML = `Se cierra <strong>${esc(act.texto)}</strong>. Los variables se borran y los fijos pasan al mes nuevo. <strong>Exportá el CSV antes</strong>: el detalle no se guarda.`;
+  chequearMesCierre();
+}
+
+// Poka-yoke en pantalla: el backend ya rechaza cerrar hacia el mismo mes, pero es mejor
+// avisar antes de que apriete el boton rojo que despues de que le falle.
+function chequearMesCierre() {
+  const aviso = $('cierreAviso');
+  if (!aviso) return;
+  const act = mesActualDelTitulo();
+  const elegido = `${$('cfgMes').value} ${$('cfgAnio').value}`.trim();
+  const mismo = act && elegido.toLowerCase() === act.texto.toLowerCase();
+  aviso.style.display = mismo ? 'block' : 'none';
+  if (mismo) aviso.textContent = `Ese es el mes actual. Elegí el mes SIGUIENTE al que cerrás (${act.texto}).`;
+}
+
 function cerrarMesFront() {
   const mes = $('cfgMes').value;
   const anio = $('cfgAnio').value;
