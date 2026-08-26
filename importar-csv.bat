@@ -1,6 +1,15 @@
 @echo off
 title Importar CSV
 cd /d "%~dp0"
+
+echo ============================================================
+echo   OJO: esto corre en TU PC contra una base LOCAL de prueba.
+echo   NO es la app de verdad. La app real vive en:
+echo   https://finanzas-personales.omnia-ar.workers.dev
+echo   Lo que borre este script NO afecta tus datos reales.
+echo ============================================================
+echo.
+
 set "PATH=C:\Program Files\nodejs;%PATH%"
 
 echo Buscando archivos CSV en esta carpeta...

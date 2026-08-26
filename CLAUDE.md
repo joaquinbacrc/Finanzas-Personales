@@ -4,7 +4,9 @@ Este archivo se carga automáticamente cuando Claude Code abre esta carpeta. Con
 
 ## Qué es este proyecto
 
-App de finanzas personales del usuario (Joaquin). **Migración** de una app original en Google Apps Script + Google Sheets ([../08-finanzas/](../08-finanzas/)) a Node.js moderno.
+App de finanzas personales del usuario (Joaquin). **Migración** de una app original en Google Apps Script + Google Sheets a Cloudflare Workers.
+El proyecto original sigue existiendo un nivel más arriba de este repo (`../Code.gs` y
+`../Index.html`); `finanzas.ts` es el porteo de ese `Code.gs`.
 
 Está **deployada en producción en Cloudflare Workers** con datos reales del usuario.
 ⚠️ **Railway está caído** (404) — ya no es producción. Ver la sección de deploy.
@@ -138,6 +140,19 @@ Detalles de implementación que importan:
   llamado julio**, con los fijos del mes nuevo fechados `01/07/2026`. Eso desordenó cuatro meses
   de datos y llevó a creer que se habían borrado (no se había borrado nada).
 
+### Runbook: cerrar el mes
+
+Es la única operación destructiva de la app. Cuatro pasos:
+
+1. **Exportá el CSV** (Config → Exportar a CSV). El cierre guarda 7 números en `historico` y
+   borra el detalle. Si no exportás, el detalle de ese mes no existe en ningún lado.
+2. **`/bookmark`** en la Console de D1 y guardá el id. Es el punto de restauración.
+3. **Verificá el mes.** El selector dice *"Mes que se abre"* y se autocompleta con el siguiente
+   al actual — no lo cambies salvo que sepas por qué. Elegir el mes actual desordena todo (pasó
+   el 31/07/2026); el backend lo rechaza y el front avisa en rojo, pero mirá igual.
+4. **Después**: el título tiene que mostrar el mes nuevo, y `SELECT COUNT(*) FROM gastos` tiene
+   que dar solo los fijos que pasaron. Si quedó el mes viejo en el título, algo falló.
+
 ### Si la app muestra números absurdos
 
 Antes de suponer pérdida de datos, agrupá los gastos por mes y cruzá `created_at` con el
@@ -156,10 +171,8 @@ FROM gastos GROUP BY anio, mes, moneda ORDER BY anio, mes, moneda;
 ## Decisiones técnicas tomadas (con razones)
 
 - **`node:sqlite` en vez de `better-sqlite3`**: better-sqlite3 requiere compilación nativa (Python + node-gyp). En Windows del usuario falló por falta de Python. node:sqlite es built-in en Node ≥22.5, sin deps.
-- *(histórico, Railway ya no es producción)* **Dockerfile en vez de Nixpacks**: Nixpacks tenía un bug de EBUSY con el cache de npm en Railway que rompía el build. Dockerfile es predecible.
 - **DB Proxy para reapertura en caliente**: el endpoint `POST /api/import-db` cierra y reabre la conexión SQLite cuando se sube un archivo nuevo. Por eso `db.ts` exporta un Proxy que delega a `_db` (mutable internamente).
 - **Auth cookie casera (HMAC) en vez de express-session**: menos deps, más control, suficiente para single-user.
-- *(histórico)* **NO se eliminó el proyecto basura "thorough-rejoicing"** del usuario en Railway (lo creó por error el Agent de Railway en la primera sesión). No molesta, no consume recursos.
 
 ## Archivos clave
 
@@ -184,12 +197,6 @@ lógica y para correr local, pero **editarlo no cambia producción**.
 - [src/auth.ts](src/auth.ts) — login con cookie firmada
 - [src/scripts/import-csv.ts](src/scripts/import-csv.ts) — importador del CSV del Sheet original
 - [Dockerfile](Dockerfile) + [railway.json](railway.json) — deploy de Railway, muerto
-- [DEPLOY.md](DEPLOY.md) — guía de deploy de Railway, obsoleta
-- [ROADMAP.md](ROADMAP.md) — migrar **las otras 8 apps** de Apps Script a Cloudflare con
-  multi-app + multi-user. **No confundir**: que *esta* app esté en Cloudflare no significa que
-  el roadmap se haya hecho. ⚠️ Verificar igual si sigue vigente: varias de esas apps
-  (Control de Stock, Producción, Mantenimiento, Arte, Merma, Proyectos) parecen vivir hoy como
-  módulos del Panel ZECAT, por una vía distinta a la que este roadmap plantea
 
 ## El service worker no intercepta navegaciones (a propósito)
 
@@ -202,16 +209,23 @@ perfectamente sana. Pasó el 20/08/2026 y dejó al usuario afuera.
 
 ## Sobre el usuario
 
-- **Nivel técnico**: no técnico. No sabe qué es Git, npm, SQL, browsers, ni qué significa "localhost".
-- **Preferencia de colaboración**: explícita y repetida — "hacé todo vos". Quiere instrucciones cero / acción máxima.
-- **Comunicación**: en español, tono casual. Evitar tecnicismos sin explicar. Cuando algo requiera intervención suya, ser MUY claro y específico (un solo paso a la vez, no listas de 7 pasos).
-- **No tenía Git instalado** — se instaló vía winget en sesión previa. Está en `C:\Program Files\Git`.
-- **Email**: joaquin.bacrc@gmail.com
-- **Usuario GitHub**: joaquinbacrc
-- **PowerShell en español** (Windows 11 Home) — los errores vienen en español, pero las versiones viejas no soportan algunos flags como `-SkipHttpErrorCheck`.
+- **Comunicación**: español rioplatense, tono casual. Prefiere acción sobre preguntas: si algo
+  se puede verificar en vez de consultarlo, verificalo.
+- **Nivel técnico**: maneja SQL en la consola de D1, git y Cloudflare sin problema. *(Una versión
+  anterior de este archivo decía que no sabía qué era Git ni SQL. Quedó vieja y llevaba a explicar
+  de más.)* Lo que sí necesita explícito es **qué acción tiene que hacer él**, porque las
+  credenciales de Cloudflare de su PC no llegan a la cuenta donde vive esta app.
+- **Email**: joaquin.bacrc@gmail.com · **GitHub**: joaquinbacrc
+- ⚠️ **La cuenta activa de `gh` se vuelve sola a `joaquinzecat`.** Correr
+  `gh auth switch --user joaquinbacrc` **antes de cada push** a este repo.
+- **PowerShell en español** (Windows 11) — los errores vienen en español.
 
-## Plan a futuro (NO ejecutar sin pedido explícito)
+## Deuda conocida (NO empezar sin pedido explícito)
 
-Ver [ROADMAP.md](ROADMAP.md). Resumen: el usuario quiere migrar el resto de sus apps (carpetas `01-` a `09-` en `../`) a Cloudflare (Workers + D1 + Pages) como apps separadas que comparten datos y multi-usuario con Cloudflare Access.
-
-**Importante**: el usuario explícitamente dijo "no ahora" para esa migración. No iniciarla hasta que lo pida.
+- **Reconstruir los fuentes async del worker** antes de montar cualquier build. Ver la sección
+  de `worker.js` arriba. Son ~700 líneas de lógica financiera a portear verificando número por
+  número.
+- **No hay backup en archivo.** Time Travel cubre 30 días y es la única red. Exportar el CSV
+  antes de cada cierre.
+- **La app no es multiusuario**: un solo `APP_PASSWORD` compartido, sin tabla de usuarios ni
+  `user_id`. Convertirla implica tocar el modelo de datos entero y aislar cada query.
