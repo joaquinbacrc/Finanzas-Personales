@@ -106,6 +106,23 @@ body{font-family:var(--body);background:var(--bg);color:var(--ink);min-height:10
 @keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 
 .header{margin-bottom:24px;padding-top:8px}
+/* El importador vive arriba del Inicio, al lado del titulo. En desktop ocupa el hueco
+   a la derecha; en telefono no hay lugar al lado, asi que baja debajo a lo ancho. */
+.header-top{display:flex;align-items:flex-start;gap:16px}
+.header-top .header{flex:0 0 auto;margin-bottom:0}
+.dropzone{flex:1;min-width:0;border:1.5px dashed var(--line);border-radius:14px;padding:14px 16px;
+  display:flex;align-items:center;gap:12px;cursor:pointer;transition:.18s;background:transparent;text-align:left}
+.dropzone:hover{border-color:var(--accent)}
+.dropzone.drag{border-color:var(--accent);background:var(--bg2);border-style:solid}
+.dropzone .dz-ico{font-size:20px;flex:0 0 auto;opacity:.55}
+.dropzone .dz-txt{flex:1;min-width:0;font-size:13px;color:var(--ink2);line-height:1.4}
+.dropzone .dz-txt b{color:var(--ink);font-weight:600}
+.dropzone .dz-sub{font-size:11px;color:var(--ink3);margin-top:2px}
+@media(max-width:720px){
+  .header-top{flex-direction:column;gap:12px}
+  .header-top .header{margin-bottom:0}
+  .dropzone{width:100%}
+}
 .header h1{font-family:var(--display);font-size:32px;font-weight:500;letter-spacing:-1px;line-height:1.1;color:var(--ink)}
 .header h1 em{font-style:italic;font-weight:400;color:var(--gold)}
 .header .subtitle{font-size:12px;color:var(--ink3);font-weight:500;text-transform:uppercase;letter-spacing:1.5px;margin-top:6px}
@@ -456,7 +473,17 @@ input[type=checkbox]{appearance:auto;-webkit-appearance:checkbox;width:auto;padd
 
 <div class="main">
   <div class="view active" id="v-dash">
-    <div class="header"><h1 id="appTitle">Finanzas</h1><div class="subtitle" id="appSubtitle"></div></div>
+    <div class="header-top">
+      <div class="header"><h1 id="appTitle">Finanzas</h1><div class="subtitle" id="appSubtitle"></div></div>
+      <div class="dropzone" id="dropZone" onclick="document.getElementById('impFile').click()"
+           role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();document.getElementById('impFile').click();}">
+        <span class="dz-ico">⇱</span>
+        <span class="dz-txt"><b>Importar resumen de tarjeta</b>
+          <span class="dz-sub" id="dzSub">Arrastrá el Excel del banco acá, o tocá para elegirlo</span>
+        </span>
+      </div>
+      <input type="file" id="impFile" accept=".xlsx" style="display:none" onchange="procesarArchivoTarjeta(this)">
+    </div>
     <div class="hero">
       <div class="hero-label">Margen disponible (ARS)</div>
       <div class="hero-val" id="heroVal">$0</div>
@@ -619,16 +646,6 @@ input[type=checkbox]{appearance:auto;-webkit-appearance:checkbox;width:auto;padd
     </div>
 
     <div class="divider-fancy"><span>datos</span></div>
-
-    <div class="card">
-      <div class="card-title"><span class="icon">⇱</span>Importar resumen de tarjeta</div>
-      <div style="font-size:13px;color:var(--ink2);line-height:1.6;margin-bottom:12px">
-        Subí el Excel de "Últimos consumos" que bajás del banco. Te muestro los consumos para
-        completar motivo y categoría, marcando los que ya tenés cargados.
-      </div>
-      <input type="file" id="impFile" accept=".xlsx" style="display:none" onchange="procesarArchivoTarjeta(this)">
-      <button class="btn btn-secondary" onclick="document.getElementById('impFile').click()">Elegir archivo .xlsx</button>
-    </div>
 
     <div class="card">
       <div class="card-title"><span class="icon">⤓</span>Exportar a CSV</div>
@@ -2142,6 +2159,44 @@ function vozDictar() {
 // ya_cargado. Aca solo se muestra y se deja completar: nada se guarda hasta que
 // el usuario aprieta Importar.
 let IMP = { consumos: [], filtro: 'todos' };
+
+// Arrastrar el archivo sobre la zona. En telefono no aplica (no hay drag de archivos),
+// por eso el click sigue siendo la via principal y el texto lo dice.
+(function initDropzone() {
+  const listo = () => {
+    const dz = document.getElementById('dropZone');
+    if (!dz) return;
+    const sub = document.getElementById('dzSub');
+    const textoNormal = sub ? sub.textContent : '';
+
+    // El navegador abre el archivo si lo soltas fuera de la zona: hay que cancelarlo
+    // en toda la ventana, o arrastrar mal te saca de la app.
+    ['dragover', 'drop'].forEach(ev =>
+      window.addEventListener(ev, e => { e.preventDefault(); }, false));
+
+    const encender = (on) => {
+      dz.classList.toggle('drag', on);
+      if (sub) sub.textContent = on ? 'Soltá el archivo acá' : textoNormal;
+    };
+
+    dz.addEventListener('dragenter', e => { e.preventDefault(); encender(true); });
+    dz.addEventListener('dragover', e => { e.preventDefault(); encender(true); });
+    dz.addEventListener('dragleave', e => {
+      // dragleave tambien salta al pasar por los hijos: solo apagamos si de verdad salio.
+      if (!dz.contains(e.relatedTarget)) encender(false);
+    });
+    dz.addEventListener('drop', e => {
+      e.preventDefault();
+      encender(false);
+      const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (!file) return;
+      if (!/\.xlsx$/i.test(file.name)) { toast('Tiene que ser un archivo .xlsx', false); return; }
+      procesarArchivoTarjeta({ files: [file], value: '' });
+    });
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', listo);
+  else listo();
+})();
 
 async function procesarArchivoTarjeta(input) {
   const file = input.files && input.files[0];
