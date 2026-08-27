@@ -255,6 +255,10 @@ input::placeholder{color:var(--ink4)}
 
 .date-header{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1.4px;color:var(--ink3);padding:8px 4px 4px;display:flex;justify-content:space-between;align-items:center}
 .date-header .dh-sum{font-family:var(--mono);font-weight:500}
+/* Los totales en moneda extranjera van al lado del equivalente en pesos, no lo
+   reemplazan: el usuario quiere ver los dos numeros a la vez. */
+.st-ext,.dh-ext{color:var(--blue);font-weight:600}
+.st-ext{margin-left:2px}
 
 .bulk-bar{position:fixed;bottom:80px;left:18px;right:18px;background:var(--ink);color:var(--paper);border-radius:var(--radius);padding:14px 18px;display:none;align-items:center;justify-content:space-between;gap:12px;box-shadow:var(--shadow-lg);z-index:90;animation:slideUp .25s ease}
 .bulk-bar.open{display:flex}
@@ -407,6 +411,10 @@ input::placeholder{color:var(--ink4)}
 .plantilla-list-row .pl-meta{font-size:11px;color:var(--ink3);margin-top:2px}
 
 /* Checkbox simple */
+/* La regla global `input,select` pone appearance:none (hace falta para los select),
+   pero se lleva puestos los checkbox: quedaban SIN MARCA VISIBLE, identicos marcados
+   y sin marcar. Se les devuelve la apariencia nativa. */
+input[type=checkbox]{appearance:auto;-webkit-appearance:checkbox;width:auto;padding:0;background:none;border:none;accent-color:var(--accent);cursor:pointer}
 .checkbox-row{display:flex;align-items:center;gap:10px;padding:8px 0;cursor:pointer;user-select:none}
 .checkbox-row input[type="checkbox"]{width:18px;height:18px;cursor:pointer;accent-color:var(--accent)}
 .checkbox-row label{font-size:13px;color:var(--ink2);font-weight:500;cursor:pointer;letter-spacing:normal;text-transform:none;margin:0}
@@ -533,7 +541,7 @@ input::placeholder{color:var(--ink4)}
         <option value="monto-asc">Menor monto</option>
       </select>
     </div>
-    <div id="gastosSubtotal" class="subtotal-row"><span class="st-label">Subtotal (ARS)</span><span class="st-val" id="gastosSubVal">$0</span><button class="btn-link" id="btnSeleccionar" onclick="toggleBulkMode()">Seleccionar</button></div>
+    <div id="gastosSubtotal" class="subtotal-row"><span class="st-label">Subtotal</span><span class="st-val" id="gastosSubVal">$0</span><button class="btn-link" id="btnSeleccionar" onclick="toggleBulkMode()">Seleccionar</button></div>
     <div class="gastos-list" id="gastosBody"></div>
     <div id="gastosEmpty" style="display:none;text-align:center;padding:40px;color:var(--ink3);font-style:italic;font-family:var(--display)">Sin resultados</div>
   </div>
@@ -1260,8 +1268,15 @@ function applyFilters() {
   else if (orden === 'monto-asc') f.sort((a,b) => a.arsEquiv - b.arsEquiv);
 
   const sub = f.reduce((acc, c) => acc + c.arsEquiv, 0);
+  // El total en pesos ya incluye lo convertido, pero convertido no es lo mismo que
+  // tenido: si hay gastos en moneda extranjera se muestran ademas en su moneda.
+  const subUSD = f.reduce((a, g) => a + (g.moneda === 'USD' ? g.montoExt : 0), 0);
+  const subEUR = f.reduce((a, g) => a + (g.moneda === 'EUR' ? g.montoExt : 0), 0);
   $('gastosSubtotal').style.display = f.length ? 'flex' : 'none';
-  $('gastosSubVal').innerHTML = fmt(sub) + ` <span style="font-size:11px;color:var(--ink3);font-weight:500">(${f.length})</span>`;
+  const extSub = (subUSD ? ` <span class="st-ext">· ${fmtUSD(subUSD)}</span>` : '') +
+                 (subEUR ? ` <span class="st-ext">· €${fmtExt(subEUR)}</span>` : '');
+  $('gastosSubVal').innerHTML = fmt(sub) + extSub +
+    ` <span style="font-size:11px;color:var(--ink3);font-weight:500">(${f.length})</span>`;
 
   if (!f.length) { $('gastosBody').innerHTML = ''; $('gastosEmpty').style.display = 'block'; return; }
   $('gastosEmpty').style.display = 'none';
@@ -1270,17 +1285,20 @@ function applyFilters() {
   let html = '';
   let lastDate = null;
   let dateSum = 0;
+  let dateSumUSD = 0, dateSumEUR = 0;
   let dateGroupBuf = [];
   const flush = () => {
     if (lastDate !== null) {
-      html += `<div class="date-header"><span>${esc(formatDateHeader(lastDate))}</span><span class="dh-sum">${fmt(dateSum)}</span></div>` + dateGroupBuf.join('');
+      const extDia = (dateSumUSD ? ` <span class="dh-ext">· ${fmtUSD(dateSumUSD)}</span>` : '') +
+                     (dateSumEUR ? ` <span class="dh-ext">· €${fmtExt(dateSumEUR)}</span>` : '');
+      html += `<div class="date-header"><span>${esc(formatDateHeader(lastDate))}</span><span class="dh-sum">${fmt(dateSum)}${extDia}</span></div>` + dateGroupBuf.join('');
     }
-    dateSum = 0; dateGroupBuf = [];
+    dateSum = 0; dateSumUSD = 0; dateSumEUR = 0; dateGroupBuf = [];
   };
 
   f.forEach((g, index) => {
     const m = g.moneda !== 'ARS' ? `<span class="amount-usd">${g.moneda === 'USD' ? 'U$' : '€'}${fmtExt(g.montoExt)}</span>` : fmt(g.arsEquiv);
-    const delay = index * 0.02;
+    const delay = Math.min(index * 0.02, 0.36);
     const selectedClass = bulkSelected.has(g.row) ? ' selected' : '';
     const cardHtml = `
       <div class="gasto-card${selectedClass}" style="animation-delay:${delay}s;" onclick="onGastoClick(${g.row})">
@@ -1306,7 +1324,10 @@ function applyFilters() {
     `;
     if (groupByDate) {
       if (lastDate !== g.fecha) { flush(); lastDate = g.fecha; }
-      dateSum += g.arsEquiv; dateGroupBuf.push(cardHtml);
+      dateSum += g.arsEquiv;
+      if (g.moneda === 'USD') dateSumUSD += g.montoExt;
+      else if (g.moneda === 'EUR') dateSumEUR += g.montoExt;
+      dateGroupBuf.push(cardHtml);
     } else {
       html += cardHtml;
     }
@@ -2208,7 +2229,7 @@ function renderImpLista() {
     const badge = c.estado === 'ya_cargado'
       ? `<span class="imp-badge ya">ya está: ${esc(c.matchMotivo || '')}</span>`
       : c.estado === 'posible_duplicado'
-        ? `<span class="imp-badge dup">¿es "${esc(c.matchMotivo || '')}"?${c.candidatos > 1 ? ' · ' + c.candidatos + ' candidatos' : ''}</span>`
+        ? `<span class="imp-badge dup">¿es ${esc(c.matchMotivo || '')}?${c.candidatos > 1 ? ' · ' + c.candidatos + ' candidatos' : ''}</span>`
         : '';
     return `<div class="imp-item ${c.sel ? '' : 'off'}" id="imp-${i}">
       <div class="imp-head">
@@ -2224,7 +2245,8 @@ function renderImpLista() {
         <input class="full" type="text" placeholder="Motivo" value="${esc(c.motivo)}" onchange="setImp(${i},'motivo',this.value)">
         <select onchange="setImp(${i},'categoria',this.value)"><option value="">Categoría</option>${cats}</select>
         <select onchange="setImp(${i},'tipo',this.value)"><option>Variable</option><option>Fijo</option></select>
-        <select class="full" onchange="setImp(${i},'imputar',this.value)"><option value="">Origen</option>${orgs}</select>
+        <select onchange="setImp(${i},'imputar',this.value)"><option value="">Origen</option>${orgs}</select>
+        <select onchange="setImp(${i},'estadoPago',this.value)"><option>Pagado</option><option>Pendiente</option></select>
       </div>
     </div>`;
   }).join('') : '<div style="text-align:center;padding:28px;color:var(--ink3);font-style:italic">Nada acá</div>';
@@ -2237,6 +2259,7 @@ function renderImpLista() {
     sels[0].value = c.categoria || '';
     sels[1].value = c.tipo || 'Variable';
     sels[2].value = c.imputar || '';
+    if (sels[3]) sels[3].value = c.estadoPago || 'Pagado';
   });
 
   const sel = IMP.consumos.filter(c => c.sel).length;
