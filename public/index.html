@@ -206,9 +206,30 @@ input::placeholder{color:var(--ink4)}
 .act button:hover{color:var(--ink);background:var(--bg2)}
 .act button.del:hover{color:var(--red);background:var(--red-bg)}
 
+/* Importador de resumen de tarjeta. Tarjetas apiladas, no tabla: en iPhone una tabla
+   de 8 columnas no entra en pantalla. */
+.imp-item{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px;background:var(--paper)}
+.imp-item.off{opacity:.55}
+.imp-head{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px}
+.imp-head input[type=checkbox]{width:24px;height:24px;flex:0 0 auto;margin-top:2px;accent-color:var(--accent)}
+.imp-meta{flex:1;min-width:0}
+.imp-fecha{font-family:var(--mono);font-size:11px;color:var(--ink3)}
+.imp-desc{font-size:12px;color:var(--ink3);font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.imp-monto{font-family:var(--mono);font-weight:700;font-size:15px;white-space:nowrap;text-align:right}
+.imp-badge{display:inline-block;font-size:10px;text-transform:uppercase;letter-spacing:.05em;padding:2px 7px;border-radius:999px;margin-top:5px}
+.imp-badge.ya{background:rgba(130,130,130,.2);color:var(--ink2)}
+.imp-badge.dup{background:rgba(200,138,46,.2);color:#b8791f}
+.imp-campos{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.imp-campos input,.imp-campos select{padding:9px 10px;font-size:13px;min-width:0;width:100%}
+.imp-campos .full{grid-column:1/-1}
+.imp-chips{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px}
+.imp-chip{font-size:12px;padding:6px 11px;border-radius:999px;background:var(--bg2);color:var(--ink2);cursor:pointer;border:1px solid transparent;user-select:none}
+.imp-chip.on{border-color:var(--accent);color:var(--ink);font-weight:600}
+.imp-aviso{font-size:12px;padding:10px;border-radius:8px;background:rgba(200,60,60,.12);color:var(--red);margin-bottom:12px;line-height:1.5}
+.modal.ancho{max-width:640px}
 .filter-bar{display:grid;grid-template-columns:1fr 1fr 1.6fr;gap:8px;margin-bottom:8px}
 .filter-bar select,.filter-bar input{padding:11px 14px;font-size:14px;min-width:0}
-.filter-bar-2{display:grid;grid-template-columns:1.3fr 1fr 1fr 1.3fr;gap:8px;margin-bottom:14px}
+.filter-bar-2{display:grid;grid-template-columns:1.1fr .95fr .85fr .85fr 1.05fr;gap:8px;margin-bottom:14px}
 .filter-bar-2 input,.filter-bar-2 select{padding:10px 12px;font-size:13px;min-width:0}
 @media(max-width:520px){
   .filter-bar{grid-template-columns:1fr 1fr}
@@ -483,6 +504,7 @@ input::placeholder{color:var(--ink4)}
     </div>
     <div class="filter-bar-2">
       <select id="fCategoria"><option value="">Categoría</option></select>
+      <select id="fMoneda" title="Moneda"><option value="">Moneda</option><option value="ARS">$ Pesos</option><option value="USD">U$S Dólares</option><option value="EUR">€ Euros</option></select>
       <input type="date" id="fDesde" title="Desde">
       <input type="date" id="fHasta" title="Hasta">
       <select id="fOrden">
@@ -572,6 +594,16 @@ input::placeholder{color:var(--ink4)}
     <div class="divider-fancy"><span>datos</span></div>
 
     <div class="card">
+      <div class="card-title"><span class="icon">⇱</span>Importar resumen de tarjeta</div>
+      <div style="font-size:13px;color:var(--ink2);line-height:1.6;margin-bottom:12px">
+        Subí el Excel de "Últimos consumos" que bajás del banco. Te muestro los consumos para
+        completar motivo y categoría, marcando los que ya tenés cargados.
+      </div>
+      <input type="file" id="impFile" accept=".xlsx" style="display:none" onchange="procesarArchivoTarjeta(this)">
+      <button class="btn btn-secondary" onclick="document.getElementById('impFile').click()">Elegir archivo .xlsx</button>
+    </div>
+
+    <div class="card">
       <div class="card-title"><span class="icon">⤓</span>Exportar a CSV</div>
       <div style="font-size:13px;color:var(--ink2);line-height:1.6;margin-bottom:12px">
         Baja los gastos del mes en curso a un archivo. Conviene hacerlo <strong>antes de cerrar el mes</strong>:
@@ -613,6 +645,18 @@ input::placeholder{color:var(--ink4)}
 <div class="modal-bg" id="modalConfirm"><div class="modal"><div class="close-bar" onclick="closeModal('modalConfirm')"></div><h2 id="confirmTitle">¿Confirmar?</h2><p style="color:var(--ink2);margin-bottom:22px;font-size:14px;line-height:1.5" id="confirmMsg"></p><div class="btn-row"><button class="btn btn-secondary" onclick="closeModal('modalConfirm')">Cancelar</button><button class="btn btn-danger" id="confirmBtn">Confirmar</button></div></div></div>
 
 <div class="modal-bg" id="modalCategoria"><div class="modal"><div class="close-bar" onclick="closeModal('modalCategoria')"></div><h2 id="catModalTitle" style="margin-bottom:8px">Categoría</h2><div id="catModalBody"></div><div class="btn-row" style="margin-top:18px"><button class="btn btn-secondary" onclick="closeModal('modalCategoria')">Cerrar</button></div></div></div>
+
+<div class="modal-bg" id="modalImportar"><div class="modal ancho"><div class="close-bar" onclick="closeModal('modalImportar')"></div>
+  <h2 style="margin-bottom:6px">Consumos del resumen</h2>
+  <div id="impResumen" style="font-size:13px;color:var(--ink2);margin-bottom:12px"></div>
+  <div id="impAviso"></div>
+  <div class="imp-chips" id="impChips"></div>
+  <div id="impLista" style="max-height:52vh;overflow-y:auto;-webkit-overflow-scrolling:touch"></div>
+  <div class="btn-row" style="margin-top:18px">
+    <button class="btn btn-secondary" onclick="closeModal('modalImportar')">Cancelar</button>
+    <button class="btn btn-primary" id="impConfirmBtn" onclick="confirmarImportacion()">Importar</button>
+  </div>
+</div></div>
 
 <div class="modal-bg" id="modalCierre"><div class="modal"><div class="close-bar" onclick="closeModal('modalCierre')"></div><h2>Preview cierre de mes</h2><div id="cierreBody" style="color:var(--ink2);font-size:14px;line-height:1.6"></div><div class="btn-row" style="margin-top:18px"><button class="btn btn-secondary" onclick="closeModal('modalCierre')">Cancelar</button><button class="btn btn-danger" id="cierreConfirmBtn">Confirmar cierre</button></div></div></div>
 
@@ -931,8 +975,38 @@ function marcarPagado(row) {
 // =============================================================================
 // Render: Tags y notas
 // =============================================================================
-function renderTagsAndNotas(texto) {
-  if (!texto) return '<em>Sin notas ni detalles adicionales.</em>';
+// El importador de tarjeta deja anclado en las notas de donde salio el gasto, como
+// [tarjeta:00008971|Www.arba.gov.ar]. El comprobante sirve para que una segunda
+// importacion lo reconozca; la descripcion, para poder ver el nombre del banco.
+// No se muestra en la lista: aparece al abrir el gasto.
+const RE_ANCLA_TARJETA = /\s*\[tarjeta:([^\|\]]+)(?:\|([^\]]*))?\]\s*/;
+
+function partirNotas(notas) {
+  const t = String(notas || '');
+  const m = t.match(RE_ANCLA_TARJETA);
+  return {
+    texto: (m ? t.replace(RE_ANCLA_TARJETA, ' ') : t).replace(/\s+/g, ' ').trim(),
+    ancla: m ? { comprobante: m[1], descripcion: (m[2] || '').trim() } : null,
+  };
+}
+
+// Vuelve a pegar el ancla despues de editar, para que no se pierda aunque el usuario
+// borre todas las notas.
+function unirNotas(texto, ancla) {
+  const base = String(texto || '').trim();
+  if (!ancla) return base;
+  return (base + ' [tarjeta:' + ancla.comprobante +
+    (ancla.descripcion ? '|' + ancla.descripcion : '') + ']').trim();
+}
+
+function renderTagsAndNotas(textoCrudo) {
+  const { texto, ancla } = partirNotas(textoCrudo);
+  const origen = ancla
+    ? `<div style="font-size:11px;color:var(--ink3);font-family:var(--mono);margin-top:6px">
+         Del resumen: ${esc(ancla.descripcion || '(sin descripción)')}
+         <span style="opacity:.6">· comprobante ${esc(ancla.comprobante)}</span>
+       </div>` : '';
+  if (!texto) return (origen || '<em>Sin notas ni detalles adicionales.</em>');
   const tags = texto.match(/#[\wÀ-ſ]+/g) || [];
   let limpio = texto;
   tags.forEach(t => { limpio = limpio.replace(t, '').trim(); });
@@ -942,7 +1016,7 @@ function renderTagsAndNotas(texto) {
     return `<span class="tag-pill" style="cursor:pointer" onclick="event.stopPropagation();filtrarPorTag('${safe}')">${esc(t)}</span>`;
   }).join('') + '</div>';
   if (limpio) html += `<div>${esc(limpio)}</div>`;
-  return html || '<em>Solo tags identificados</em>';
+  return (html || '<em>Solo tags identificados</em>') + origen;
 }
 
 function filtrarPorTag(tag) {
@@ -1115,7 +1189,7 @@ function toggleExp(row) {
 // =============================================================================
 function renderList() {
   applyFilters();
-  ['fTipo','fImputar','fCategoria','fOrden'].forEach(id => $(id).onchange = applyFilters);
+  ['fTipo','fImputar','fCategoria','fMoneda','fOrden'].forEach(id => $(id).onchange = applyFilters);
   ['fDesde','fHasta'].forEach(id => $(id).onchange = applyFilters);
   $('fBuscar').oninput = applyFilters;
 }
@@ -1139,6 +1213,7 @@ function applyFilters() {
   const tipo = $('fTipo').value;
   const imp = $('fImputar').value;
   const cat = $('fCategoria').value;
+  const mon = $('fMoneda').value;
   const desde = $('fDesde').value;
   const hasta = $('fHasta').value;
   const orden = $('fOrden').value;
@@ -1148,6 +1223,7 @@ function applyFilters() {
     if (tipo && g.tipo !== tipo) return false;
     if (imp && g.imputar !== imp) return false;
     if (cat && g.categoria !== cat) return false;
+    if (mon && (g.moneda || 'ARS') !== mon) return false;
     if (q && !g.motivo.toLowerCase().includes(q) && !(g.notas && g.notas.toLowerCase().includes(q))) return false;
     if (desde || hasta) {
       const fg = parseFechaGasto(g.fecha);
@@ -1572,7 +1648,11 @@ function abrirEditar(row) {
       <div class="form-group"><label>Categoría</label><select id="eCategoria">${opts(S.categorias, g.categoria)}</select></div>
       <div class="form-group"><label>Cuota</label><input type="text" id="eCuota" value="${esc(g.cuota || '')}"></div>
     </div>
-    <div class="form-group"><label>Notas y Tags</label><input type="text" id="eNotas" value="${esc(g.notas)}"></div>
+    <div class="form-group"><label>Notas y Tags</label><input type="text" id="eNotas" value="${esc(partirNotas(g.notas).texto)}"></div>
+    ${partirNotas(g.notas).ancla ? `<div style="font-size:11px;color:var(--ink3);font-family:var(--mono);margin-top:-6px">
+        Del resumen: ${esc(partirNotas(g.notas).ancla.descripcion || '(sin descripción)')}
+        <span style="opacity:.6">· comprobante ${esc(partirNotas(g.notas).ancla.comprobante)}</span>
+      </div>` : ''}
   `;
   openModal('modalEdit');
 }
@@ -1587,7 +1667,10 @@ function guardarEdicion() {
     montoARS: moneda === 'ARS' ? valMonto : 0,
     montoExt: moneda !== 'ARS' ? valMonto : 0,
     imputar: $('eImputar').value, tipo: $('eTipo').value, categoria: $('eCategoria').value,
-    cuota: $('eCuota').value.trim(), estado: $('eEstado').value, notas: $('eNotas').value.trim()
+    cuota: $('eCuota').value.trim(), estado: $('eEstado').value,
+    // El ancla no esta en el input, asi que se repone: si el usuario borra las notas
+    // no se pierde de donde salio el gasto ni la posibilidad de deduplicarlo.
+    notas: unirNotas($('eNotas').value, partirNotas((S.gastos.find(x => x.row === editRow) || {}).notas).ancla)
   };
   closeModal('modalEdit');
 
@@ -1712,6 +1795,177 @@ function chequearMesCierre() {
   const mismo = act && elegido.toLowerCase() === act.texto.toLowerCase();
   aviso.style.display = mismo ? 'block' : 'none';
   if (mismo) aviso.textContent = `Ese es el mes actual. Elegí el mes SIGUIENTE al que cerrás (${act.texto}).`;
+}
+
+// =============================================================================
+// Importador de resumen de tarjeta
+// =============================================================================
+// El backend devuelve cada consumo marcado como nuevo / posible_duplicado /
+// ya_cargado. Aca solo se muestra y se deja completar: nada se guarda hasta que
+// el usuario aprieta Importar.
+let IMP = { consumos: [], filtro: 'todos' };
+
+async function procesarArchivoTarjeta(input) {
+  const file = input.files && input.files[0];
+  input.value = '';                     // permite volver a elegir el mismo archivo
+  if (!file) return;
+  if (!/\.xlsx$/i.test(file.name)) { toast('Tiene que ser un archivo .xlsx', false); return; }
+
+  $('loader').classList.remove('hide');
+  try {
+    const buf = await file.arrayBuffer();
+    const resp = await fetch('/api/tarjeta/parse', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: buf,
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error || ('HTTP ' + resp.status));
+    IMP.consumos = (data.consumos || []).map(c => ({
+      ...c,
+      // Los nuevos vienen marcados; los que se parecen a algo ya cargado NO, para que
+      // haya que decidirlo a mano. Duplicar un gasto es peor que olvidarse uno.
+      sel: c.estado === 'nuevo',
+      motivo: c.motivoSugerido || '',
+      categoria: c.categoria || '',
+      tipo: c.tipo || 'Variable',
+      imputar: c.imputar || sugerirOrigenTarjeta(),
+      estadoPago: 'Pagado',
+    }));
+    IMP.filtro = 'todos';
+    renderImportador(data);
+    openModal('modalImportar');
+  } catch (e) {
+    toast(e.message || 'No pude leer el archivo', false);
+  } finally {
+    $('loader').classList.add('hide');
+  }
+}
+
+// Si hay un origen que parezca una tarjeta, lo usamos de default.
+function sugerirOrigenTarjeta() {
+  return (S.origenes || []).find(o => /visa|master|amex|tarjeta/i.test(o)) || '';
+}
+
+function renderImportador(data) {
+  const n = IMP.consumos.filter(c => c.estado === 'nuevo').length;
+  const d = IMP.consumos.filter(c => c.estado === 'posible_duplicado').length;
+  const y = IMP.consumos.filter(c => c.estado === 'ya_cargado').length;
+
+  $('impResumen').innerHTML =
+    `<strong>${IMP.consumos.length}</strong> consumos · cierre <strong>${esc(data.cierre || '?')}</strong>` +
+    (data.totales && data.totales.ars ? ` · total ${fmt(data.totales.ars)}` : '') +
+    (data.pagos && data.pagos.length ? ` · ${data.pagos.length} pagos excluidos` : '');
+
+  // Si la suma no coincide con el subtotal del banco, algo se leyo mal: hay que decirlo.
+  $('impAviso').innerHTML = data.cuadra === false
+    ? `<div class="imp-aviso">Ojo: lo que leí suma ${fmt(data.sumaARS)} pero el resumen dice ${fmt(data.totales.ars)}.
+       Revisá los montos antes de importar.</div>` : '';
+
+  $('impChips').innerHTML = [
+    ['todos', 'Todos (' + IMP.consumos.length + ')'],
+    ['nuevo', 'Nuevos (' + n + ')'],
+    ['posible_duplicado', 'Puede que ya estén (' + d + ')'],
+    ['ya_cargado', 'Ya cargados (' + y + ')'],
+  ].filter(([k]) => k === 'todos' || IMP.consumos.some(c => c.estado === k))
+   .map(([k, t]) => `<div class="imp-chip ${IMP.filtro === k ? 'on' : ''}" onclick="filtrarImp('${k}')">${esc(t)}</div>`).join('');
+
+  renderImpLista();
+}
+
+function filtrarImp(k) {
+  IMP.filtro = k;
+  document.querySelectorAll('#impChips .imp-chip').forEach(el =>
+    el.classList.toggle('on', el.getAttribute('onclick').includes("'" + k + "'")));
+  renderImpLista();
+}
+
+function renderImpLista() {
+  const cats = (S.categorias || []).map(c => `<option>${esc(c)}</option>`).join('');
+  const orgs = (S.origenes || []).map(o => `<option>${esc(o)}</option>`).join('');
+  const visibles = IMP.consumos.map((c, i) => [c, i])
+    .filter(([c]) => IMP.filtro === 'todos' || c.estado === IMP.filtro);
+
+  $('impLista').innerHTML = visibles.length ? visibles.map(([c, i]) => {
+    const monto = c.moneda === 'USD' ? fmtUSD(c.montoUSD) : fmt(c.montoARS);
+    const badge = c.estado === 'ya_cargado'
+      ? `<span class="imp-badge ya">ya está: ${esc(c.matchMotivo || '')}</span>`
+      : c.estado === 'posible_duplicado'
+        ? `<span class="imp-badge dup">¿es "${esc(c.matchMotivo || '')}"?${c.candidatos > 1 ? ' · ' + c.candidatos + ' candidatos' : ''}</span>`
+        : '';
+    return `<div class="imp-item ${c.sel ? '' : 'off'}" id="imp-${i}">
+      <div class="imp-head">
+        <input type="checkbox" ${c.sel ? 'checked' : ''} onchange="toggleImp(${i}, this.checked)">
+        <div class="imp-meta">
+          <div class="imp-fecha">${esc(c.fecha || '')}${c.cuota ? ' · cuota ' + esc(c.cuota) : ''}${c.pendiente ? ' · pendiente' : ''}</div>
+          <div class="imp-desc" title="${esc(c.descripcion)}">${esc(c.descripcion)}</div>
+          ${badge}
+        </div>
+        <div class="imp-monto">${monto}</div>
+      </div>
+      <div class="imp-campos">
+        <input class="full" type="text" placeholder="Motivo" value="${esc(c.motivo)}" onchange="setImp(${i},'motivo',this.value)">
+        <select onchange="setImp(${i},'categoria',this.value)"><option value="">Categoría</option>${cats}</select>
+        <select onchange="setImp(${i},'tipo',this.value)"><option>Variable</option><option>Fijo</option></select>
+        <select class="full" onchange="setImp(${i},'imputar',this.value)"><option value="">Origen</option>${orgs}</select>
+      </div>
+    </div>`;
+  }).join('') : '<div style="text-align:center;padding:28px;color:var(--ink3);font-style:italic">Nada acá</div>';
+
+  // Los <select> no aceptan value en el HTML: hay que setearlos despues de pintar.
+  visibles.forEach(([c, i]) => {
+    const el = $('imp-' + i);
+    if (!el) return;
+    const sels = el.querySelectorAll('select');
+    sels[0].value = c.categoria || '';
+    sels[1].value = c.tipo || 'Variable';
+    sels[2].value = c.imputar || '';
+  });
+
+  const sel = IMP.consumos.filter(c => c.sel).length;
+  $('impConfirmBtn').textContent = sel ? `Importar ${sel}` : 'Importar';
+  $('impConfirmBtn').disabled = !sel;
+}
+
+function toggleImp(i, v) {
+  IMP.consumos[i].sel = v;
+  const el = $('imp-' + i);
+  if (el) el.classList.toggle('off', !v);
+  const sel = IMP.consumos.filter(c => c.sel).length;
+  $('impConfirmBtn').textContent = sel ? `Importar ${sel}` : 'Importar';
+  $('impConfirmBtn').disabled = !sel;
+}
+
+function setImp(i, campo, v) { IMP.consumos[i][campo] = v; }
+
+function confirmarImportacion() {
+  const elegidos = IMP.consumos.filter(c => c.sel);
+  if (!elegidos.length) return;
+  const sinMotivo = elegidos.filter(c => !String(c.motivo || '').trim()).length;
+  if (sinMotivo) { toast(`Faltan ${sinMotivo} motivos por completar`, false); return; }
+
+  $('loader').classList.remove('hide');
+  fetch('/api/tarjeta/importar', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      consumos: elegidos.map(c => ({
+        fecha: c.fecha, descripcion: c.descripcion, comprobante: c.comprobante,
+        motivo: c.motivo, categoria: c.categoria, tipo: c.tipo, imputar: c.imputar,
+        moneda: c.moneda, montoARS: c.montoARS, montoUSD: c.montoUSD,
+        cuota: c.cuota, estado: c.estadoPago,
+      })),
+    }),
+  }).then(async r => {
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+    return d;
+  }).then(d => {
+    closeModal('modalImportar');
+    toast(`${d.importados} gastos importados`);
+    silentReload();
+  }).catch(e => toast(e.message || 'No pude importar', false))
+    .finally(() => $('loader').classList.add('hide'));
 }
 
 function cerrarMesFront() {
