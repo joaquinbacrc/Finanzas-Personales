@@ -657,6 +657,335 @@ var PUBLIC_PATHS = /* @__PURE__ */ new Set([
   "/icon-512.png",
   "/favicon.ico"
 ]);
+// ============================================================================
+// IMPORTADOR DE RESUMEN DE TARJETA (.xlsx)
+//
+// Un .xlsx es un ZIP con XML adentro. Se descomprime con DecompressionStream, que
+// existe en Workers: cero dependencias externas.
+//
+// Validado contra el resumen real de Visa 5278 (27/08/2026): la suma de lo extraido
+// da 1.286.336,11 ARS y 60,94 USD, exactamente los subtotales que declara el banco.
+// El unico consumo que no entra en esa suma es el marcado "- Pendiente", que el banco
+// tampoco cuenta.
+// ============================================================================
+
+var SIG_EOCD = 0x06054b50, SIG_CEN = 0x02014b50, SIG_LOC = 0x04034b50;
+var u16 = /* @__PURE__ */ __name((d, o) => d.getUint16(o, true), "u16");
+var u32 = /* @__PURE__ */ __name((d, o) => d.getUint32(o, true), "u32");
+
+async function zipLeer(buf) {
+  const d = new DataView(buf);
+  let eocd = -1;
+  for (let i = buf.byteLength - 22; i >= Math.max(0, buf.byteLength - 65558); i--) {
+    if (u32(d, i) === SIG_EOCD) { eocd = i; break; }
+  }
+  if (eocd === -1) throw new Error("El archivo no parece un Excel valido (.xlsx).");
+  const cantidad = u16(d, eocd + 10);
+  let p = u32(d, eocd + 16);
+  const entradas = {};
+  for (let i = 0; i < cantidad; i++) {
+    if (u32(d, p) !== SIG_CEN) break;
+    const metodo = u16(d, p + 10), tamComp = u32(d, p + 20);
+    const nLen = u16(d, p + 28), eLen = u16(d, p + 30), cLen = u16(d, p + 32);
+    const nombre = new TextDecoder().decode(new Uint8Array(buf, p + 46, nLen));
+    entradas[nombre] = { offset: u32(d, p + 42), metodo, tamComp };
+    p += 46 + nLen + eLen + cLen;
+  }
+  return entradas;
+}
+__name(zipLeer, "zipLeer");
+
+async function zipExtraer(buf, e) {
+  const d = new DataView(buf);
+  let p = e.offset;
+  if (u32(d, p) !== SIG_LOC) throw new Error("Archivo Excel corrupto.");
+  p += 30 + u16(d, p + 26) + u16(d, p + 28);
+  const crudo = new Uint8Array(buf, p, e.tamComp);
+  if (e.metodo === 0) return new TextDecoder().decode(crudo);
+  if (e.metodo !== 8) throw new Error("Compresion no soportada en el Excel.");
+  const stream = new Blob([crudo]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+  return await new Response(stream).text();
+}
+__name(zipExtraer, "zipExtraer");
+
+var XML_ENT = { lt: "<", gt: ">", amp: "&", quot: '"', apos: "'" };
+function xmlDesescapar(s) {
+  return s.replace(/&(lt|gt|amp|quot|apos|#x?[0-9a-fA-F]+);/g, (m, e) => {
+    if (XML_ENT[e] !== void 0) return XML_ENT[e];
+    return String.fromCodePoint(e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10));
+  });
+}
+__name(xmlDesescapar, "xmlDesescapar");
+
+function textoDeT(frag) {
+  return (frag.match(/<t[^>]*>[\s\S]*?<\/t>/g) || [])
+    .map((t) => xmlDesescapar(t.replace(/^<t[^>]*>/, "").replace(/<\/t>$/, ""))).join("");
+}
+__name(textoDeT, "textoDeT");
+
+function colIndice(ref) {
+  const letras = (ref.match(/^[A-Z]+/) || ["A"])[0];
+  let n = 0;
+  for (const c of letras) n = n * 26 + (c.charCodeAt(0) - 64);
+  return n - 1;
+}
+__name(colIndice, "colIndice");
+
+async function leerXlsx(arrayBuffer) {
+  const zip = await zipLeer(arrayBuffer);
+  const shared = [];
+  if (zip["xl/sharedStrings.xml"]) {
+    const xml = await zipExtraer(arrayBuffer, zip["xl/sharedStrings.xml"]);
+    for (const si of xml.match(/<si>[\s\S]*?<\/si>/g) || []) shared.push(textoDeT(si));
+  }
+  const hoja = Object.keys(zip).filter((n) => /^xl\/worksheets\/sheet\d+\.xml$/.test(n))
+    .sort((a, b) => +a.match(/\d+/)[0] - +b.match(/\d+/)[0])[0];
+  if (!hoja) throw new Error("El Excel no tiene ninguna hoja.");
+  const xml = await zipExtraer(arrayBuffer, zip[hoja]);
+  const filas = [];
+  for (const rowXml of xml.match(/<row[^>]*>[\s\S]*?<\/row>/g) || []) {
+    const celdas = [];
+    for (const c of rowXml.match(/<c[^>]*\/>|<c[^>]*>[\s\S]*?<\/c>/g) || []) {
+      const ref = (c.match(/r="([A-Z]+\d+)"/) || [])[1];
+      const tipo = (c.match(/t="([^"]+)"/) || [])[1];
+      let val = "";
+      if (tipo === "inlineStr") val = textoDeT((c.match(/<is>[\s\S]*?<\/is>/) || [""])[0]);
+      else {
+        const v = c.match(/<v>([\s\S]*?)<\/v>/);
+        if (v) val = tipo === "s" ? shared[+v[1]] ?? "" : xmlDesescapar(v[1]);
+      }
+      const idx = ref ? colIndice(ref) : celdas.length;
+      while (celdas.length < idx) celdas.push("");
+      celdas[idx] = val;
+    }
+    filas.push(celdas);
+  }
+  return filas;
+}
+__name(leerXlsx, "leerXlsx");
+
+// ---------- normalizacion de los datos del resumen ----------
+
+function montoResumen(txt) {
+  if (txt == null) return 0;
+  const s = String(txt).trim();
+  if (!s) return 0;
+  const n = parseFloat(s.replace(/[^\d,.\-]/g, "").replace(/\./g, "").replace(",", "."));
+  return isNaN(n) ? 0 : n;
+}
+__name(montoResumen, "montoResumen");
+
+function cuotaResumen(txt) {
+  const m = String(txt || "").match(/(\d+)\s*de\s*(\d+)/i);
+  return m ? `${m[1]}/${m[2]}` : "";
+}
+__name(cuotaResumen, "cuotaResumen");
+
+// "Merpago*centrodeelearning" -> "Centrodeelearning". El procesador de pago no aporta.
+function motivoSugerido(desc) {
+  let s = String(desc || "").trim();
+  s = s.replace(/^(merpago|mercadopago|dlo|epagos|finpay|pedidosya|payu|mobbex)\s*\*\s*/i, "");
+  s = s.replace(/\s*-\s*pendiente?\.?$/i, "");
+  s = s.replace(/\s+\d{6,}[\d-]*$/, "");
+  s = s.replace(/\s+[a-z0-9]{12,}$/i, "");
+  s = s.replace(/\s+/g, " ").trim();
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : String(desc || "").trim();
+}
+__name(motivoSugerido, "motivoSugerido");
+
+function normTexto(s) {
+  return String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+}
+__name(normTexto, "normTexto");
+
+// Clave estable para el diccionario de alias: ignora hashes y numeros que cambian
+// en cada transaccion, para que "Anthropic in1tz..." y "Anthropic in9xy..." sean lo mismo.
+function claveAlias(desc) {
+  return normTexto(motivoSugerido(desc));
+}
+__name(claveAlias, "claveAlias");
+
+var STOP_ALIAS = /* @__PURE__ */ new Set(["de", "la", "el", "los", "las", "del", "y", "sa", "srl", "com", "ar", "www"]);
+function tokensDe(s) {
+  return new Set(normTexto(s).split(" ").filter((t) => t.length > 2 && !STOP_ALIAS.has(t)));
+}
+__name(tokensDe, "tokensDe");
+
+function similitudTexto(a, b) {
+  const A = tokensDe(a), B = tokensDe(b);
+  if (!A.size || !B.size) return 0;
+  let inter = 0;
+  for (const t of A) {
+    if (B.has(t)) { inter++; continue; }
+    for (const u of B) if (t.length >= 5 && (u.startsWith(t) || t.startsWith(u))) { inter++; break; }
+  }
+  return inter / (A.size + B.size - inter);
+}
+__name(similitudTexto, "similitudTexto");
+
+function diasEntreFechas(a, b) {
+  const p = /* @__PURE__ */ __name((s) => {
+    const x = String(s || "").split("/");
+    const d = Date.UTC(+x[2], +x[1] - 1, +x[0]);
+    return isNaN(d) ? null : d;
+  }, "p");
+  const x = p(a), y = p(b);
+  return x === null || y === null ? 9999 : Math.abs(x - y) / 864e5;
+}
+__name(diasEntreFechas, "diasEntreFechas");
+
+function extraerConsumos(filas) {
+  const res = { cierre: "", vencimiento: "", consumos: [], pagos: [], totales: {} };
+  for (let i = 0; i < filas.length - 1; i++) {
+    if (/fecha de cierre/i.test(filas[i][0] || "")) {
+      res.cierre = (filas[i + 1][0] || "").trim();
+      res.vencimiento = (filas[i + 1][1] || "").trim();
+      break;
+    }
+  }
+  let seccion = "", enTabla = false, ultimaFecha = "";
+  for (const f of filas) {
+    const c0 = (f[0] || "").trim();
+    const esHeader = /^fecha$/i.test(c0) && /^descripci/i.test((f[1] || "").trim());
+    if (esHeader) { enTabla = true; ultimaFecha = ""; continue; }
+    if (!enTabla) { if (c0) seccion = c0; continue; }
+    if (/^subtotal/i.test(c0)) {
+      res.totales = { ars: montoResumen(f[4]), usd: montoResumen(f[5]) };
+      enTabla = false; seccion = ""; continue;
+    }
+    const desc = (f[1] || "").trim();
+    if (!desc) { if (c0) { enTabla = false; seccion = c0; } continue; }
+    if (c0) ultimaFecha = c0;   // la fecha solo figura en el primer consumo de cada dia
+    const montoARS = montoResumen(f[4]), montoUSD = montoResumen(f[5]);
+    if (!montoARS && !montoUSD) continue;
+    const comprobante = (f[3] || "").trim();
+    const item = {
+      fecha: ultimaFecha, descripcion: desc, motivoSugerido: motivoSugerido(desc),
+      cuota: cuotaResumen(f[2]), comprobante, montoARS, montoUSD,
+      moneda: montoUSD && !montoARS ? "USD" : "ARS",
+      pendiente: /-\s*pendiente?\.?$/i.test(desc) || comprobante === "-",
+    };
+    const esPago = /pago de tarjeta|devoluci/i.test(seccion) || montoARS < 0 || montoUSD < 0;
+    (esPago ? res.pagos : res.consumos).push(item);
+  }
+  return res;
+}
+__name(extraerConsumos, "extraerConsumos");
+
+// Cruza cada consumo con los gastos ya cargados.
+//  ya_cargado        -> el comprobante figura en las notas de un gasto (certeza total)
+//  posible_duplicado -> se parece a uno existente; decide el usuario
+//  nuevo             -> no se parece a nada
+function marcarExistentes(consumos, gastos) {
+  const porComprobante = /* @__PURE__ */ new Map();
+  for (const g of gastos) {
+    for (const m of String(g.notas || "").matchAll(/\[tarjeta:([^\|\]]+)/g)) porComprobante.set(m[1], g);
+  }
+  return consumos.map((c) => {
+    if (c.comprobante && c.comprobante !== "-") {
+      const ya = porComprobante.get(c.comprobante);
+      if (ya) return { ...c, estado: "ya_cargado", matchId: ya.row, matchMotivo: ya.motivo, confianza: "exacta" };
+    }
+    const monto = c.moneda === "USD" ? c.montoUSD : c.montoARS;
+    if (!monto) return { ...c, estado: "nuevo", candidatos: 0 };
+    const puntuados = [];
+    for (const g of gastos) {
+      if (String(g.moneda || "ARS") !== c.moneda) continue;
+      const gm = c.moneda === "USD" ? num(g.montoExt) : num(g.montoARS);
+      if (!gm) continue;
+      // Tolerancia ABSOLUTA: quien redondea al cargar redondea a centenas, no un %.
+      // Con umbral relativo, Telecentro (108.894) matcheaba con un curso de 106.944.
+      const dif = Math.abs(gm - monto);
+      const tol = Math.max(c.moneda === "USD" ? 0.5 : 50, monto * 0.002);
+      let score = 0;
+      if (dif < 0.01) score += 5;
+      else if (dif <= tol) score += 2;
+      else continue;
+      if (c.cuota && String(g.cuota || "") === c.cuota) score += 4;
+      const sim = similitudTexto(c.descripcion + " " + c.motivoSugerido, g.motivo);
+      if (sim >= 0.5) score += 3; else if (sim > 0) score += 1;
+      // La fecha pesa poco: los gastos Fijos llevan 01/MM porque cerrarMes se la reescribe.
+      const d = diasEntreFechas(c.fecha, g.fecha);
+      if (d <= 5) score += 2; else if (d <= 40) score += 1;
+      puntuados.push({ g, score, sim });
+    }
+    if (!puntuados.length) return { ...c, estado: "nuevo", candidatos: 0 };
+    puntuados.sort((a, b) => b.score - a.score || b.sim - a.sim);
+    const top = puntuados[0];
+    const empatados = puntuados.filter((p) => p.score === top.score).length;
+    // "alta" solo si el NOMBRE tambien coincide. Con monto y fecha nada mas, un consumo
+    // de Anthropic por U$S5 quedaba "alta" contra un gasto de Cloudflare de U$S5: mismo
+    // precio, dias cercanos y cero que ver uno con otro. Sin parecido de nombre, media.
+    const confianza = empatados > 1 ? "ambigua" : top.sim > 0 && top.score >= 7 ? "alta" : "media";
+    return { ...c, estado: "posible_duplicado", matchId: top.g.row, matchMotivo: top.g.motivo, candidatos: empatados, confianza };
+  });
+}
+__name(marcarExistentes, "marcarExistentes");
+
+// ---------- endpoints ----------
+
+async function parsearResumenTarjeta(db, arrayBuffer) {
+  const filas = await leerXlsx(arrayBuffer);
+  const r = extraerConsumos(filas);
+  if (!r.consumos.length) throw new Error("No encontre consumos en ese Excel. Fijate que sea el de 'Ultimos consumos' del banco.");
+
+  const { settings, gastos } = await loadCierreState(db);
+  const alias = JSON.parse(settings["alias_tarjeta"] || "{}");
+  const marcados = marcarExistentes(r.consumos, gastos.map((g) => rowToGasto(g, num(settings["tc_usd"]) || 1400, num(settings["tc_eur"]) || 1500)));
+
+  // El alias manda sobre la sugerencia: es el nombre que el usuario ya eligio antes.
+  const conAlias = marcados.map((c) => {
+    const a = alias[claveAlias(c.descripcion)];
+    return a ? { ...c, motivoSugerido: a.motivo || c.motivoSugerido, categoria: a.categoria || "", tipo: a.tipo || "", imputar: a.imputar || "", desdeAlias: true } : c;
+  });
+
+  const sumaARS = r.consumos.filter((c) => !c.pendiente).reduce((a, c) => a + c.montoARS, 0);
+  const sumaUSD = r.consumos.filter((c) => !c.pendiente).reduce((a, c) => a + c.montoUSD, 0);
+  return {
+    cierre: r.cierre, vencimiento: r.vencimiento, totales: r.totales,
+    // Si esto no cuadra, algo se leyo mal: el front lo muestra como advertencia.
+    cuadra: Math.abs(sumaARS - num(r.totales.ars)) < 1 && Math.abs(sumaUSD - num(r.totales.usd)) < 0.01,
+    sumaARS, sumaUSD,
+    pagos: r.pagos, consumos: conAlias,
+  };
+}
+__name(parsearResumenTarjeta, "parsearResumenTarjeta");
+
+async function importarConsumos(db, items) {
+  if (!Array.isArray(items) || !items.length) throw new Error("No hay consumos para importar.");
+  const { settings } = await loadCierreState(db);
+  const alias = JSON.parse(settings["alias_tarjeta"] || "{}");
+
+  const stmt = db.prepare(`
+    INSERT INTO gastos (fecha, motivo, monto_ars, moneda, monto_ext, imputar, tipo, cuota, categoria, estado, notas)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const inserts = [];
+  for (const g of items) {
+    const moneda = g.moneda === "USD" ? "USD" : "ARS";
+    // El comprobante y la descripcion del banco quedan anclados en notas: el comprobante
+    // para que una segunda importacion reconozca el gasto, y la descripcion para poder
+    // mostrar de donde salio. El front los oculta salvo en el detalle del gasto.
+    const ancla = g.comprobante && g.comprobante !== "-"
+      ? `[tarjeta:${g.comprobante}|${String(g.descripcion || "").replace(/[\[\]|]/g, " ")}]` : "";
+    const notas = [String(g.notas || "").trim(), ancla].filter(Boolean).join(" ");
+    inserts.push(stmt.bind(
+      g.fecha || "", g.motivo || motivoSugerido(g.descripcion),
+      moneda === "ARS" ? num(g.montoARS) : 0, moneda, moneda === "USD" ? num(g.montoUSD) : 0,
+      g.imputar || "", g.tipo || "Variable", g.cuota || "", g.categoria || "Otros",
+      g.estado || "Pagado", notas));
+    // Aprendemos el alias para la proxima importacion.
+    if (g.descripcion && g.motivo) {
+      alias[claveAlias(g.descripcion)] = { motivo: g.motivo, categoria: g.categoria || "", tipo: g.tipo || "", imputar: g.imputar || "" };
+    }
+  }
+  await db.batch(inserts);
+  await setSettingValue(db, "alias_tarjeta", JSON.stringify(alias));
+  return { success: true, importados: inserts.length };
+}
+__name(importarConsumos, "importarConsumos");
+
 var worker_default = {
   async fetch(req, env) {
     const url = new URL(req.url);
@@ -744,6 +1073,18 @@ async function handleApi(req, env, path, method) {
     return json(await savePlantillas(db, body.plantillas ?? []));
   }
 
+  if (path === "/api/tarjeta/parse" && method === "POST") {
+    // El body son los bytes crudos del .xlsx. No se guarda nada todavia: solo se lee
+    // y se cruza con lo ya cargado para que el usuario revise antes de confirmar.
+    const buf = await req.arrayBuffer();
+    if (!buf || buf.byteLength < 100) throw new Error("El archivo llego vacio.");
+    if (buf.byteLength > 8 * 1024 * 1024) throw new Error("El archivo es demasiado grande (mas de 8 MB).");
+    return json(await parsearResumenTarjeta(db, buf));
+  }
+  if (path === "/api/tarjeta/importar" && method === "POST") {
+    const body = await readJson(req);
+    return json(await importarConsumos(db, body.consumos ?? []));
+  }
   if (path === "/api/cierre/preview" && method === "GET") {
     return json(await previewCierreMes(db));
   }
