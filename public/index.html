@@ -2223,7 +2223,7 @@ async function procesarArchivoTarjeta(input) {
       categoria: c.categoria || '',
       tipo: c.tipo || 'Variable',
       imputar: c.imputar || sugerirOrigenTarjeta(),
-      estadoPago: 'Pagado',
+      estadoPago: c.estadoAlias || 'Pagado',
     }));
     IMP.filtro = 'todos';
     renderImportador(data);

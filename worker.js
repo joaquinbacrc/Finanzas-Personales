@@ -937,7 +937,7 @@ async function parsearResumenTarjeta(db, arrayBuffer) {
   // El alias manda sobre la sugerencia: es el nombre que el usuario ya eligio antes.
   const conAlias = marcados.map((c) => {
     const a = alias[claveAlias(c.descripcion)];
-    return a ? { ...c, motivoSugerido: a.motivo || c.motivoSugerido, categoria: a.categoria || "", tipo: a.tipo || "", imputar: a.imputar || "", desdeAlias: true } : c;
+    return a ? { ...c, motivoSugerido: a.motivo || c.motivoSugerido, categoria: a.categoria || "", tipo: a.tipo || "", imputar: a.imputar || "", estadoAlias: a.estado || "Pagado", desdeAlias: true } : c;
   });
 
   const sumaARS = r.consumos.filter((c) => !c.pendiente).reduce((a, c) => a + c.montoARS, 0);
@@ -977,7 +977,9 @@ async function importarConsumos(db, items) {
       g.estado || "Pagado", notas));
     // Aprendemos el alias para la proxima importacion.
     if (g.descripcion && g.motivo) {
-      alias[claveAlias(g.descripcion)] = { motivo: g.motivo, categoria: g.categoria || "", tipo: g.tipo || "", imputar: g.imputar || "" };
+      // Se recuerda TODO lo que el usuario completo, estado incluido: si un comercio
+      // siempre entra como Pendiente, no tiene que volver a marcarlo cada mes.
+      alias[claveAlias(g.descripcion)] = { motivo: g.motivo, categoria: g.categoria || "", tipo: g.tipo || "", imputar: g.imputar || "", estado: g.estado || "Pagado" };
     }
   }
   await db.batch(inserts);
