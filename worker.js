@@ -544,8 +544,9 @@ async function cerrarMes(db, nuevoMes, nuevoAnio, nuevaFechaCierre) {
       }
     }
     let cuotaNueva = g.cuota;
-    // Si estuvo pausado no se pago esa cuota: no avanza. "Celular 6/18" sigue siendo 6/18.
-    if (!pausado && g.cuota && g.cuota.includes("/")) {
+    // La cuota avanza SIEMPRE, aunque el gasto este pausado. Pausar no significa "no lo
+    // pago": el plan de cuotas sigue su curso igual, solo se saca del total del mes.
+    if (g.cuota && g.cuota.includes("/")) {
       const p = g.cuota.split("/");
       const ca = parseInt(p[0]) || 0, ct = parseInt(p[1]) || 0;
       cuotaNueva = ca < ct ? `${ca + 1}/${ct}` : "";

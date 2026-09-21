@@ -396,8 +396,9 @@ export function cerrarMes(nuevoMes: string, nuevoAnio: string | number, nuevaFec
     }
 
     let cuotaNueva = g.cuota;
-    // Si estuvo pausado no se pagó esa cuota: no avanza.
-    if (!pausado && g.cuota && g.cuota.includes('/')) {
+    // La cuota avanza SIEMPRE, aunque el gasto esté pausado: pausar no significa que no
+    // se pague, solo lo saca del total del mes.
+    if (g.cuota && g.cuota.includes('/')) {
       const p = g.cuota.split('/');
       const ca = parseInt(p[0]!) || 0, ct = parseInt(p[1]!) || 0;
       cuotaNueva = (ca < ct) ? `${ca + 1}/${ct}` : '';

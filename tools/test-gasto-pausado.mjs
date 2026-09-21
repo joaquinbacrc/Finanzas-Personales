@@ -124,7 +124,7 @@ ok(net && net[9] === 'Pendiente', 'y vuelve ACTIVO (Pendiente), o sea despausado
 ok(W.__borr().length === 4, 'se borran los 4 gastos del mes viejo, pausado incluido',
    String(W.__borr().length));
 
-console.log('\n=== 5. la cuota no avanza si estuvo pausado ===');
+console.log('\n=== 5. la cuota avanza igual aunque este pausado ===');
 W.__set([
   G(1, 'Celular', 68000, 'Fijo', 'VISA 5278', 'Pausado', '6/18'),
   G(2, 'Curso', 100000, 'Fijo', 'VISA 5278', 'Pagado', '3/9'),
@@ -133,8 +133,10 @@ await W.cerrarMes(W.__db, 'Octubre', 2026, '');
 const ins2 = W.__ins();
 const cel = ins2.find((a) => a[1] === 'Celular');
 const cur = ins2.find((a) => a[1] === 'Curso');
-ok(cel && cel[7] === '6/18', 'el pausado NO avanza la cuota: sigue 6/18', cel && cel[7]);
-ok(cur && cur[7] === '4/9', 'el activo si avanza: 3/9 -> 4/9', cur && cur[7]);
+// Pausar no significa que el gasto no se pague: el plan de cuotas sigue su curso igual,
+// pausar solo lo saca del total del mes.
+ok(cel && cel[7] === '7/18', 'el pausado TAMBIEN avanza la cuota: 6/18 -> 7/18', cel && cel[7]);
+ok(cur && cur[7] === '4/9', 'el activo avanza igual: 3/9 -> 4/9', cur && cur[7]);
 
 fs.unlinkSync(tmp);
 console.log('\n' + (fallas ? '*** ' + fallas + ' FALLAS ***' : 'TODAS LAS PRUEBAS PASAN'));
