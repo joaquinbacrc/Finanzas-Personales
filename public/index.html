@@ -212,7 +212,10 @@ input::placeholder{color:var(--ink4)}
 .gasto-card:active{transform:scale(0.99);}
 /* Pausado: se sigue viendo (hay que poder reactivarlo) pero se nota que no cuenta.
    Mismo criterio visual que `.imp-item.off` del importador. */
-.gasto-card.pausado{opacity:.5}
+/* Se atenua el CONTENIDO, no la card: la animacion de entrada cardIn tiene
+   fill-mode forwards y deja opacity:1 en la card, pisando cualquier regla normal.
+   Verificado en vivo: con .gasto-card.pausado{opacity:.5} la card seguia al 100%. */
+.gasto-card.pausado .gc-main,.gasto-card.pausado .gc-sub{opacity:.5}
 .gasto-card.pausado .gc-monto{text-decoration:line-through}
 .badge-pausado{background:var(--bg2);color:var(--ink3)}
 .act button.pausa.on{color:var(--accent)}
