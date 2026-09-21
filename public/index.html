@@ -210,6 +210,12 @@ input::placeholder{color:var(--ink4)}
 @keyframes cardIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 .gasto-card{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius-sm);padding:14px 16px;box-shadow:var(--shadow-sm);animation:cardIn .3s ease-out forwards;cursor:pointer;transition:0.2s;position:relative}
 .gasto-card:active{transform:scale(0.99);}
+/* Pausado: se sigue viendo (hay que poder reactivarlo) pero se nota que no cuenta.
+   Mismo criterio visual que `.imp-item.off` del importador. */
+.gasto-card.pausado{opacity:.5}
+.gasto-card.pausado .gc-monto{text-decoration:line-through}
+.badge-pausado{background:var(--bg2);color:var(--ink3)}
+.act button.pausa.on{color:var(--accent)}
 .gasto-card.selected{border-color:var(--accent);background:var(--accent-bg)}
 .gc-main{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:12px;}
 .gc-motivo{font-weight:600;font-size:15px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;}
@@ -739,6 +745,10 @@ const today = () => { const d=new Date(); return d.getFullYear()+'-'+String(d.ge
 const d2s = d => { if(!d) return ''; const p=d.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; };
 const s2d = s => { if(!s) return ''; const p=String(s).split('/'); if(p.length===3) return p[2]+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0'); return ''; };
 const ESC_MAP = {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
+// Un gasto Fijo se puede pausar por un mes: sigue en la lista pero no cuenta en NINGÚN
+// total. Mismo criterio en worker.js (`esPausado`), que es el que manda tras un F5.
+const esPausado = g => g && g.estado === 'Pausado';
+const activos = arr => (arr || []).filter(g => !esPausado(g));
 function esc(s) { if (s == null) return ''; return String(s).replace(/[&<>"']/g, c => ESC_MAP[c]); }
 
 // Parsea un monto detectando formato (US 1234.56 / ES 1.234,56 / mixto). Devuelve NaN si no parsea.
@@ -892,6 +902,7 @@ function recalcDashboard() {
 
   let tarjOblig=0, gMP=0, gNUBI=0, gUSD=0, total=0, fijos=0, vars_=0;
   S.gastos.forEach(g => {
+    if (esPausado(g)) return;   // pausado: no suma a ningún acumulador
     const v = g.arsEquiv || 0;
     total += v;
     if (g.imputar === 'VISA 5278' || g.imputar === 'VISA 4305' || g.imputar === 'Obligación Fija') tarjOblig += v;
@@ -990,9 +1001,11 @@ function renderDash() {
 // =============================================================================
 function renderOutliers() {
   const byCat = {};
-  S.gastos.forEach(g => { if (!byCat[g.categoria]) byCat[g.categoria] = []; byCat[g.categoria].push(g); });
+  // Un pausado no puede ser atípico ni ensuciar el promedio de su categoría.
+  const gastosActivos = activos(S.gastos);
+  gastosActivos.forEach(g => { if (!byCat[g.categoria]) byCat[g.categoria] = []; byCat[g.categoria].push(g); });
   const outs = [];
-  S.gastos.forEach(g => {
+  gastosActivos.forEach(g => {
     const others = byCat[g.categoria].filter(x => x !== g);
     if (others.length < 2) return;
     const mean = others.reduce((s, x) => s + x.arsEquiv, 0) / others.length;
@@ -1014,6 +1027,27 @@ function renderOutliers() {
         <span class="outlier-amt">${fmt(o.g.arsEquiv)}</span>
       </div>
     `).join('');
+}
+
+// Pausar un gasto Fijo lo saca de todos los totales de ESTE mes sin borrarlo. Al cerrar
+// el mes vuelve activo solo, porque cerrarMes reinserta los fijos como 'Pendiente'.
+// Al despausar queda 'Pendiente', no 'Pagado': si se pausó fue porque no se pagó.
+function togglePausa(row) {
+  const idx = S.gastos.findIndex(g => g.row === row);
+  if (idx === -1) return;
+  const oldEstado = S.gastos[idx].estado;
+  const nuevo = esPausado(S.gastos[idx]) ? 'Pendiente' : 'Pausado';
+  S.gastos[idx].estado = nuevo;
+  recalcDashboard();
+  renderAll();
+  toast(nuevo === 'Pausado' ? 'Pausado: no cuenta este mes' : 'Reactivado');
+  google.script.run
+    .withFailureHandler(e => {
+      S.gastos[idx].estado = oldEstado;
+      recalcDashboard(); renderAll();
+      toast('Error: ' + e.message, false);
+    })
+    .toggleEstado(row, nuevo);
 }
 
 function marcarPagado(row) {
@@ -1188,7 +1222,7 @@ function aplicarUrlParams() {
   if (p.cuota) $('nCuota').value = p.cuota;
   if (p.notas) $('nNotas').value = p.notas;
   if (p.fecha && /^\d{4}-\d{2}-\d{2}$/.test(p.fecha)) $('nFecha').value = p.fecha;
-  if (p.estado && ['Pagado','Pendiente'].indexOf(p.estado) !== -1) $('nEstado').value = p.estado;
+  if (p.estado && ['Pagado','Pendiente','Pausado'].indexOf(p.estado) !== -1) $('nEstado').value = p.estado;
   switchView('add');
   calcularPreview();
   setTimeout(() => $('nMonto').focus(), 150);
@@ -1300,11 +1334,13 @@ function applyFilters() {
   else if (orden === 'monto-desc') f.sort((a,b) => b.arsEquiv - a.arsEquiv);
   else if (orden === 'monto-asc') f.sort((a,b) => a.arsEquiv - b.arsEquiv);
 
-  const sub = f.reduce((acc, c) => acc + c.arsEquiv, 0);
+  // El pausado sigue visible en la lista pero suma 0: si desapareciera no habría
+  // forma de volver a activarlo.
+  const sub = f.reduce((acc, c) => acc + (esPausado(c) ? 0 : c.arsEquiv), 0);
   // El total en pesos ya incluye lo convertido, pero convertido no es lo mismo que
   // tenido: si hay gastos en moneda extranjera se muestran ademas en su moneda.
-  const subUSD = f.reduce((a, g) => a + (g.moneda === 'USD' ? g.montoExt : 0), 0);
-  const subEUR = f.reduce((a, g) => a + (g.moneda === 'EUR' ? g.montoExt : 0), 0);
+  const subUSD = f.reduce((a, g) => a + (g.moneda === 'USD' && !esPausado(g) ? g.montoExt : 0), 0);
+  const subEUR = f.reduce((a, g) => a + (g.moneda === 'EUR' && !esPausado(g) ? g.montoExt : 0), 0);
   $('gastosSubtotal').style.display = f.length ? 'flex' : 'none';
   const extSub = (subUSD ? ` <span class="st-ext">· ${fmtUSD(subUSD)}</span>` : '') +
                  (subEUR ? ` <span class="st-ext">· €${fmtExt(subEUR)}</span>` : '');
@@ -1334,7 +1370,7 @@ function applyFilters() {
     const delay = Math.min(index * 0.02, 0.36);
     const selectedClass = bulkSelected.has(g.row) ? ' selected' : '';
     const cardHtml = `
-      <div class="gasto-card${selectedClass}" style="animation-delay:${delay}s;" onclick="onGastoClick(${g.row})">
+      <div class="gasto-card${selectedClass}${esPausado(g) ? ' pausado' : ''}" style="animation-delay:${delay}s;" onclick="onGastoClick(${g.row})">
         <div class="gc-bulk-check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="display:none"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
         <div class="gc-main">
           <div class="gc-motivo">${esc(g.motivo)}${g.cuota ? ' <span class="cuota-tag">' + esc(g.cuota) + '</span>' : ''}</div>
@@ -1343,9 +1379,10 @@ function applyFilters() {
         <div class="gc-sub">
           <div class="gc-info">
             <span class="gc-date">${esc(g.fecha)}</span><span class="gc-dot">·</span><span>${esc(g.imputar)}</span><span class="gc-dot">·</span><span class="badge badge-${g.tipo === 'Fijo' ? 'fijo' : 'variable'}">${esc(g.tipo)}</span>
-            ${g.estado === 'Pendiente' ? '<span class="badge" style="background:var(--red-bg);color:var(--red);margin-left:4px">Pendiente</span>' : ''}
+            ${esPausado(g) ? '<span class="badge badge-pausado">Pausado</span>' : g.estado === 'Pendiente' ? '<span class="badge" style="background:var(--red-bg);color:var(--red);margin-left:4px">Pendiente</span>' : ''}
           </div>
           <div class="act">
+            ${g.tipo === 'Fijo' ? `<button class="pausa${esPausado(g) ? ' on' : ''}" onclick="event.stopPropagation(); togglePausa(${g.row})" title="${esPausado(g) ? 'Reactivar este mes' : 'No lo pago este mes'}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">${esPausado(g) ? '<polygon points="5 3 19 12 5 21 5 3" fill="currentColor" stroke="none"></polygon>' : '<rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect>'}</svg></button>` : ''}
             <button onclick="event.stopPropagation(); abrirEditar(${g.row})" title="Editar"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
             <button class="del" onclick="event.stopPropagation(); pedirEliminar(${g.row})" title="Eliminar"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
           </div>
@@ -1357,9 +1394,11 @@ function applyFilters() {
     `;
     if (groupByDate) {
       if (lastDate !== g.fecha) { flush(); lastDate = g.fecha; }
-      dateSum += g.arsEquiv;
-      if (g.moneda === 'USD') dateSumUSD += g.montoExt;
-      else if (g.moneda === 'EUR') dateSumEUR += g.montoExt;
+      if (!esPausado(g)) {
+        dateSum += g.arsEquiv;
+        if (g.moneda === 'USD') dateSumUSD += g.montoExt;
+        else if (g.moneda === 'EUR') dateSumEUR += g.montoExt;
+      }
       dateGroupBuf.push(cardHtml);
     } else {
       html += cardHtml;
@@ -1509,7 +1548,7 @@ function refrescarSelects() {
 // Modal categoría (drill-down)
 // =============================================================================
 function verDetalleCategoria(cat) {
-  const f = S.gastos.filter(g => g.categoria === cat);
+  const f = activos(S.gastos).filter(g => g.categoria === cat);
   if (!f.length) return;
   let tot = 0;
   const porOrig = {};
@@ -1535,7 +1574,7 @@ function verDetalleCategoria(cat) {
 function renderResumen() {
   const catData = {};
   let totalCats = 0;
-  S.gastos.forEach(g => { catData[g.categoria] = (catData[g.categoria] || 0) + g.arsEquiv; totalCats += g.arsEquiv; });
+  activos(S.gastos).forEach(g => { catData[g.categoria] = (catData[g.categoria] || 0) + g.arsEquiv; totalCats += g.arsEquiv; });
   const catArr = Object.keys(catData).map(k => ({name: k, val: catData[k]})).sort((a,b) => b.val - a.val);
 
   if (totalCats > 0) {
@@ -1572,7 +1611,7 @@ function renderResumen() {
   ];
 
   let totalFijo = 0, totalVar = 0;
-  S.gastos.forEach(g => { if (g.tipo === 'Fijo') totalFijo += g.arsEquiv; else if (g.tipo === 'Variable') totalVar += g.arsEquiv; });
+  activos(S.gastos).forEach(g => { if (g.tipo === 'Fijo') totalFijo += g.arsEquiv; else if (g.tipo === 'Variable') totalVar += g.arsEquiv; });
   const totalAll = totalFijo + totalVar;
 
   $('rsFijoVal').textContent = fmt(totalFijo);
@@ -1581,7 +1620,7 @@ function renderResumen() {
   $('rsVarPct').textContent = totalAll > 0 ? `${(totalVar/totalAll*100).toFixed(1)}% del total` : '—';
 
   $('resumenCards').innerHTML = groups.map(grp => {
-    const items = S.gastos.filter(g => grp.origins.indexOf(g.imputar) !== -1);
+    const items = activos(S.gastos).filter(g => grp.origins.indexOf(g.imputar) !== -1);
     const fijos = items.filter(g => g.tipo === 'Fijo');
     const vars_ = items.filter(g => g.tipo === 'Variable');
     const totalFG = fijos.reduce((s,g) => s + g.arsEquiv, 0);
@@ -1601,7 +1640,7 @@ function renderResumen() {
     </div>`;
   }).join('');
 
-  const sorted = [...S.gastos].sort((a,b) => b.arsEquiv - a.arsEquiv).slice(0, 5);
+  const sorted = activos(S.gastos).sort((a,b) => b.arsEquiv - a.arsEquiv).slice(0, 5);
   $('topGastos').innerHTML = sorted.map((g, i) => `<div class="top-item"><span class="rank">#${i+1}</span><div class="info"><div class="motivo">${esc(g.motivo)}${g.cuota ? ' <span class="cuota-tag">'+esc(g.cuota)+'</span>' : ''}</div><div class="src">${esc(g.imputar)} · ${esc(g.tipo)}</div></div><span class="amt">${fmt(g.arsEquiv)}</span></div>`).join('') || '<div style="text-align:center;padding:20px;color:var(--ink3);font-style:italic">Sin gastos</div>';
 
   renderCompararMeses();
@@ -1706,7 +1745,7 @@ function abrirEditar(row) {
   $('editForm').innerHTML = `
     <div class="form-row">
       <div class="form-group"><label>Fecha</label><input type="date" id="eFecha" value="${esc(s2d(g.fecha))}"></div>
-      <div class="form-group"><label>Estado</label><select id="eEstado">${opts(['Pagado','Pendiente'], g.estado)}</select></div>
+      <div class="form-group"><label>Estado</label><select id="eEstado">${opts(['Pagado','Pendiente','Pausado'], g.estado)}</select></div>
     </div>
     <div class="form-group"><label>Motivo</label><input type="text" id="eMotivo" value="${esc(g.motivo)}"></div>
     <div class="form-row">

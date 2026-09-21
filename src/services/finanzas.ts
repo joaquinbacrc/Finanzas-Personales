@@ -47,6 +47,11 @@ const num = (v: unknown): number => {
   return isNaN(n) ? 0 : n;
 };
 
+// Un gasto Fijo se puede pausar por un mes: sigue existiendo pero no cuenta en ningún
+// total. Al cerrar el mes vuelve activo solo, porque los fijos se reinsertan como
+// 'Pendiente'. Mismo criterio en worker.js (el que corre en producción).
+const esPausado = (g: { estado?: string }) => g?.estado === 'Pausado';
+
 const arsEquiv = (g: { moneda: string; monto_ars: number; monto_ext: number }, tcUSD: number, tcEUR: number): number => {
   if (g.moneda === 'USD') return num(g.monto_ext) * tcUSD;
   if (g.moneda === 'EUR') return num(g.monto_ext) * tcEUR;
@@ -138,6 +143,7 @@ function computeDashboard(gastos: Gasto[], ingresos: Ingreso[], tenenciaUSD: num
 
   let tarjOblig = 0, gMP = 0, gNUBI = 0, gUSD_USD = 0, total = 0, fijos = 0, variables = 0;
   for (const g of gastos) {
+    if (esPausado(g)) continue;   // pausado: no suma a ningún acumulador de este loop
     const v = g.arsEquiv;
     total += v;
     if (g.imputar === 'VISA 5278' || g.imputar === 'VISA 4305' || g.imputar === 'Obligación Fija') tarjOblig += v;
@@ -313,6 +319,8 @@ export function previewCierreMes() {
   let totalGastos = 0, gastosNUBI = 0, gastosUSD_USD = 0, gastosOtros = 0;
   let fijosPasan = 0, variablesBorran = 0, cuotasAvanzan = 0, cuotasTerminan = 0;
   for (const g of data) {
+    // El preview tiene que mostrar lo que REALMENTE se va a cerrar.
+    if (esPausado(g)) continue;
     totalGastos += g.arsEquiv;
     if (g.imputar === 'NUBI') gastosNUBI += g.arsEquiv;
     else if (g.imputar === 'Caja USD') gastosUSD_USD += (g.moneda === 'USD' ? g.montoExt : g.arsEquiv / (tcUSD || 1));
@@ -374,16 +382,22 @@ export function cerrarMes(nuevoMes: string, nuevoAnio: string | number, nuevaFec
   const nuevaFecha = `01/${String(monthIdx + 1).padStart(2, '0')}/${nuevoAnio}`;
 
   for (const g of data) {
-    if (g.imputar === 'NUBI') gastosNUBI += g.arsEquiv;
-    else if (g.imputar === 'Caja USD') gastosCajaUSD_USD += (g.moneda === 'USD' ? g.montoExt : g.arsEquiv / (tcUSD || 1));
-    else gastosNoNUBI_NoUSD += g.arsEquiv;
+    const pausado = esPausado(g);
+    // Un pausado NO entra al histórico: no se pagó. Pero SÍ se reinserta abajo si es Fijo,
+    // y su id sigue en idsContabilizados, así que igual se borra del mes viejo.
+    if (!pausado) {
+      if (g.imputar === 'NUBI') gastosNUBI += g.arsEquiv;
+      else if (g.imputar === 'Caja USD') gastosCajaUSD_USD += (g.moneda === 'USD' ? g.montoExt : g.arsEquiv / (tcUSD || 1));
+      else gastosNoNUBI_NoUSD += g.arsEquiv;
 
-    if (g.tipo === 'Variable') {
-      varSumARS += g.moneda === 'ARS' ? g.montoARS : g.montoExt * (g.moneda === 'USD' ? tcUSD : tcEUR);
+      if (g.tipo === 'Variable') {
+        varSumARS += g.moneda === 'ARS' ? g.montoARS : g.montoExt * (g.moneda === 'USD' ? tcUSD : tcEUR);
+      }
     }
 
     let cuotaNueva = g.cuota;
-    if (g.cuota && g.cuota.includes('/')) {
+    // Si estuvo pausado no se pagó esa cuota: no avanza.
+    if (!pausado && g.cuota && g.cuota.includes('/')) {
       const p = g.cuota.split('/');
       const ca = parseInt(p[0]!) || 0, ct = parseInt(p[1]!) || 0;
       cuotaNueva = (ca < ct) ? `${ca + 1}/${ct}` : '';
