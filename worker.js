@@ -697,8 +697,8 @@ var PUBLIC_PATHS = /* @__PURE__ */ new Set([
 // Un .xlsx es un ZIP con XML adentro. Se descomprime con DecompressionStream, que
 // existe en Workers: cero dependencias externas.
 //
-// Validado contra el resumen real de Visa 5278 (27/08/2026): la suma de lo extraido
-// da 1.286.336,11 ARS y 60,94 USD, exactamente los subtotales que declara el banco.
+// Validado contra un resumen real del banco: la suma de lo extraido coincide al centavo
+// con los subtotales en pesos y en dolares que declara el propio resumen.
 // El unico consumo que no entra en esa suma es el marcado "- Pendiente", que el banco
 // tampoco cuenta.
 // ============================================================================
@@ -815,7 +815,7 @@ function cuotaResumen(txt) {
 }
 __name(cuotaResumen, "cuotaResumen");
 
-// "Merpago*centrodeelearning" -> "Centrodeelearning". El procesador de pago no aporta.
+// "Merpago*heladeria" -> "Heladeria". El procesador de pago no aporta.
 function motivoSugerido(desc) {
   let s = String(desc || "").trim();
   s = s.replace(/^(merpago|mercadopago|dlo|epagos|finpay|pedidosya|payu|mobbex)\s*\*\s*/i, "");
@@ -834,7 +834,7 @@ function normTexto(s) {
 __name(normTexto, "normTexto");
 
 // Clave estable para el diccionario de alias: ignora hashes y numeros que cambian
-// en cada transaccion, para que "Anthropic in1tz..." y "Anthropic in9xy..." sean lo mismo.
+// en cada transaccion, para que "Servicio in1tz..." y "Servicio in9xy..." sean lo mismo.
 function claveAlias(desc) {
   return normTexto(motivoSugerido(desc));
 }
@@ -929,7 +929,7 @@ function marcarExistentes(consumos, gastos) {
       const gm = c.moneda === "USD" ? num(g.montoExt) : num(g.montoARS);
       if (!gm) continue;
       // Tolerancia ABSOLUTA: quien redondea al cargar redondea a centenas, no un %.
-      // Con umbral relativo, Telecentro (108.894) matcheaba con un curso de 106.944.
+      // Con umbral relativo, dos gastos distintos de ~$100k que diferian un 1,8% matcheaban.
       const dif = Math.abs(gm - monto);
       const tol = Math.max(c.moneda === "USD" ? 0.5 : 50, monto * 0.002);
       let score = 0;
@@ -949,7 +949,7 @@ function marcarExistentes(consumos, gastos) {
     const top = puntuados[0];
     const empatados = puntuados.filter((p) => p.score === top.score).length;
     // "alta" solo si el NOMBRE tambien coincide. Con monto y fecha nada mas, un consumo
-    // de Anthropic por U$S5 quedaba "alta" contra un gasto de Cloudflare de U$S5: mismo
+    // de un servicio por U$S5 quedaba "alta" contra el gasto de OTRO servicio de U$S5: mismo
     // precio, dias cercanos y cero que ver uno con otro. Sin parecido de nombre, media.
     const confianza = empatados > 1 ? "ambigua" : top.sim > 0 && top.score >= 7 ? "alta" : "media";
     return { ...c, estado: "posible_duplicado", matchId: top.g.row, matchMotivo: top.g.motivo, candidatos: empatados, confianza };

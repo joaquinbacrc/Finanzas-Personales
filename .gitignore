@@ -10,3 +10,7 @@ data/
 
 # CSVs exportados localmente para importar — no subir
 *.csv
+
+# Tests que usan datos financieros REALES del usuario (su Excel del banco).
+# El repo es publico: estos no se versionan nunca.
+tools/local/

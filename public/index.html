@@ -147,7 +147,7 @@ body{font-family:var(--body);background:var(--bg);color:var(--ink);min-height:10
 .metric .val.green{color:var(--green)} .metric .val.red{color:var(--red)}
 /* El delta vs mes anterior estaba en position:absolute arriba a la derecha y con un
    numero largo se corria hacia la izquierda hasta TAPAR el label 'Gastos' (medido en
-   vivo: 158 px de solape con $1.469.552,46 en un card de 228 px). Ahora va en flujo,
+   vivo: 158 px de solape con un monto de 7 cifras en un card de 228 px). Ahora va en flujo,
    debajo del monto, donde no puede pisar nada y puede cortar en dos lineas. */
 .metric{display:flex;flex-direction:column}
 .metric-delta{font-size:10px;font-weight:600;font-family:var(--mono);color:var(--ink3);margin-top:5px;line-height:1.35;overflow-wrap:anywhere}
@@ -1082,7 +1082,7 @@ function marcarPagado(row) {
 // Render: Tags y notas
 // =============================================================================
 // El importador de tarjeta deja anclado en las notas de donde salio el gasto, como
-// [tarjeta:00008971|Www.arba.gov.ar]. El comprobante sirve para que una segunda
+// [tarjeta:00012345|Comercio de ejemplo]. El comprobante sirve para que una segunda
 // importacion lo reconozca; la descripcion, para poder ver el nombre del banco.
 // No se muestra en la lista: aparece al abrir el gasto.
 const RE_ANCLA_TARJETA = /\s*\[tarjeta:([^\|\]]+)(?:\|([^\]]*))?\]\s*/;

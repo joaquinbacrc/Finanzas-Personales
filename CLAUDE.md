@@ -196,7 +196,9 @@ clave/valor texto y ya existía: cero migración.
   gastos cargados. Recién al cerrar el mes queda guardado.
 - Si se renombra una categoría, los meses viejos conservan el nombre viejo: son claves distintas.
 - **Nunca commitear los datos** (un dump de `historico_categorias`, un CSV, etc.): **el repo es
-  público**.
+  público**. Vale también para comentarios, tests y **mensajes de commit**: usar montos y
+  comercios de ejemplo, nunca los reales. (El 23/09/2026 se encontraron montos y comercios
+  reales en un test, en comentarios y en el historial de commits.)
 
 Probado en `tools/test-gasto-pausado.mjs` (caso 6): el cierre guarda el mes, Comida suma bien y
 un gasto pausado no entra.
@@ -252,8 +254,9 @@ Ingresos, Gastos, Margen y % Variable siempre, y las categorías prendidas. Reem
 - [tools/check-worker.mjs](tools/check-worker.mjs) — guardrail `npm run check:worker`
 - [tools/test-gasto-pausado.mjs](tools/test-gasto-pausado.mjs) — pausa + cierre + desglose,
   sobre el código REAL de `worker.js` (21 pruebas). Correr antes de tocar `cerrarMes`
-- [tools/test-importador-tarjeta.mjs](tools/test-importador-tarjeta.mjs) — importador del resumen
-  de tarjeta contra el Excel real
+- `tools/local/test-importador-tarjeta.mjs` — importador del resumen de tarjeta contra el Excel
+  REAL del usuario. **No está versionado a propósito** (`tools/local/` está en `.gitignore`):
+  usa sus gastos y montos reales, y **el repo es público**. Vive solo en su PC.
 
 ### Legado de Railway (NO corre en producción)
 
