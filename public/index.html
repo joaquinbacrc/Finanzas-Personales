@@ -1586,7 +1586,13 @@ function verDetalleCategoria(cat) {
 // Render: Resumen
 // =============================================================================
 function renderResumen() {
-  renderEvolucion();
+  // Aislado: si el grafico falla no puede llevarse puesto el resto del Resumen, que se
+  // dibuja despues. El error queda a la vista en la card y en consola, no se traga.
+  try { renderEvolucion(); } catch (e) {
+    console.error('renderEvolucion', e);
+    const c = $('histCard');
+    if (c) { c.style.display = 'block'; $('evoNote').textContent = 'No pude dibujar el gráfico: ' + e.message; }
+  }
 
   const groups = [
     { name:'Tarjeta', subtitle:'VISA + Obligación Fija', icon:'💳', color:'#2A5680', origins:['VISA 5278','VISA 4305','Obligación Fija'] },
