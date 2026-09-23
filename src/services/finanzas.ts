@@ -116,6 +116,8 @@ export function getAllData() {
   const origenes: string[] = JSON.parse(getSetting('origenes') || '[]');
   const categorias: string[] = JSON.parse(getSetting('categorias') || '[]');
   const plantillas: Plantilla[] = JSON.parse(getSetting('plantillas') || '[]');
+  let historicoCategorias: Record<string, Record<string, number>> = {};
+  try { historicoCategorias = JSON.parse(getSetting('historico_categorias') || '{}') || {}; } catch { historicoCategorias = {}; }
 
   return {
     titulo,
@@ -130,6 +132,7 @@ export function getAllData() {
     tipos: ['Fijo', 'Variable'],
     dashboard,
     historico,
+    historicoCategorias,
     plantillas,
   };
 }
@@ -460,6 +463,19 @@ export function cerrarMes(nuevoMes: string, nuevoAnio: string | number, nuevaFec
     db.prepare(`UPDATE ingresos SET monto = ? WHERE id = 3`).run(Math.round(nubi + sobranteNUBI));
     setSettingValue('tenencia_usd', String(Math.round(sobranteUSD * 100) / 100));
     setSettingValue('titulo', `${TITULO_PREFIJO}${nuevoMes} ${nuevoAnio}`);
+    // Desglose por categoría del mes que se cierra (historico guarda solo 7 números).
+    // Mismo criterio y misma clave que worker.js.
+    const porCategoria: Record<string, number> = {};
+    for (const g of data) {
+      if (esPausado(g)) continue;
+      const c = g.categoria || 'Otros';
+      porCategoria[c] = (porCategoria[c] || 0) + g.arsEquiv;
+    }
+    for (const c of Object.keys(porCategoria)) porCategoria[c] = Math.round(porCategoria[c]! * 100) / 100;
+    let histCats: Record<string, Record<string, number>> = {};
+    try { histCats = JSON.parse(getSetting('historico_categorias') || '{}') || {}; } catch { histCats = {}; }
+    histCats[tituloActual.replace(TITULO_PREFIJO, '')] = porCategoria;
+    setSettingValue('historico_categorias', JSON.stringify(histCats));
     if (nuevaFechaCierre) setSettingValue('cierre_tarjeta', nuevaFechaCierre);
   });
 

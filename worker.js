@@ -220,6 +220,8 @@ async function getAllData(db) {
   const origenes = JSON.parse(settings["origenes"] || "[]");
   const categorias = JSON.parse(settings["categorias"] || "[]");
   const plantillas = JSON.parse(settings["plantillas"] || "[]");
+  let historicoCategorias = {};
+  try { historicoCategorias = JSON.parse(settings["historico_categorias"] || "{}") || {}; } catch (e) { historicoCategorias = {}; }
   return {
     titulo,
     tc: tcUSD,
@@ -233,6 +235,7 @@ async function getAllData(db) {
     tipos: ["Fijo", "Variable"],
     dashboard,
     historico,
+    historicoCategorias,
     plantillas
   };
 }
@@ -614,9 +617,24 @@ async function cerrarMes(db, nuevoMes, nuevoAnio, nuevaFechaCierre) {
     INSERT INTO settings (key, value) VALUES (?, ?)
     ON CONFLICT(key) DO UPDATE SET value = excluded.value
   `).bind(key, value), "upsertSetting");
+  // Desglose por categoria del mes que se cierra. `historico` guarda solo 7 numeros
+  // agregados, asi que sin esto no hay forma de comparar categorias mes a mes (el detalle
+  // se borra en el cierre). Va en settings como JSON para no migrar la tabla: la D1 vive
+  // en una cuenta a la que esta PC no llega. La clave es el mismo rotulo que historico.mes.
+  const porCategoria = {};
+  for (const g of data) {
+    if (esPausado(g)) continue;
+    const c = g.categoria || "Otros";
+    porCategoria[c] = (porCategoria[c] || 0) + g.arsEquiv;
+  }
+  for (const c of Object.keys(porCategoria)) porCategoria[c] = Math.round(porCategoria[c] * 100) / 100;
+  let histCats = {};
+  try { histCats = JSON.parse(settings["historico_categorias"] || "{}") || {}; } catch (e) { histCats = {}; }
+  histCats[tituloActual.replace(TITULO_PREFIJO, "")] = porCategoria;
   const settingStmts = [
     upsertSetting("tenencia_usd", String(Math.round(sobranteUSD * 100) / 100)),
-    upsertSetting("titulo", `${TITULO_PREFIJO}${nuevoMes} ${nuevoAnio}`)
+    upsertSetting("titulo", `${TITULO_PREFIJO}${nuevoMes} ${nuevoAnio}`),
+    upsertSetting("historico_categorias", JSON.stringify(histCats))
   ];
   if (nuevaFechaCierre)
     settingStmts.push(upsertSetting("cierre_tarjeta", nuevaFechaCierre));

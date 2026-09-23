@@ -25,7 +25,7 @@ const preludio = [
   "const num = (v) => { if (v == null || v === '') return 0; const n = Number(v); return isNaN(n) ? 0 : n; };",
   'let __settings = { tc_usd: "1500", tc_eur: "1600", titulo: "FIN Septiembre 2026", cierre_tarjeta: "", tenencia_usd: "0" };',
   'let __ingresosRows = [{ id: 1, monto: 1000000 }, { id: 2, monto: 500000 }, { id: 3, monto: 200000 }];',
-  'let __gastos = []; let __insertados = []; let __borrados = [];',
+  'let __gastos = []; let __insertados = []; let __borrados = []; let __setts = {};',
   'const setSettingValue = async (db, k, v) => { __settings[k] = v; };',
   '',
 ].join('\n');
@@ -36,6 +36,7 @@ const epilogo = [
   'export const __set = (g) => { __gastos = g; __insertados = []; __borrados = []; };',
   'export const __ins = () => __insertados;',
   'export const __borr = () => __borrados;',
+  'export const __settsGuardados = () => __setts;',
   'export const __db = {',
   '  prepare: (sql) => ({',
   '    all: async () => {',
@@ -51,7 +52,10 @@ const epilogo = [
   '    run: async () => ({ meta: { changes: 0 } }),',
   '  }),',
   '  batch: async (stmts) => {',
-  '    for (const s of stmts || []) if (s && /INSERT INTO gastos/i.test(s.sql || "")) __insertados.push(s.a);',
+  '    for (const s of stmts || []) {',
+  '      if (s && /INSERT INTO gastos/i.test(s.sql || "")) __insertados.push(s.a);',
+  '      if (s && /INSERT INTO settings/i.test(s.sql || "")) __setts[s.a[0]] = s.a[1];',
+  '    }',
   '    return [];',
   '  },',
   '};',
@@ -137,6 +141,22 @@ const cur = ins2.find((a) => a[1] === 'Curso');
 // pausar solo lo saca del total del mes.
 ok(cel && cel[7] === '7/18', 'el pausado TAMBIEN avanza la cuota: 6/18 -> 7/18', cel && cel[7]);
 ok(cur && cur[7] === '4/9', 'el activo avanza igual: 3/9 -> 4/9', cur && cur[7]);
+
+console.log('\n=== 6. el cierre guarda el desglose por categoria (sin el pausado) ===');
+W.__set([
+  { ...G(1, 'Alquiler', 400000, 'Fijo', 'VISA 5278'), categoria: 'Hogar' },
+  { ...G(2, 'Internet', 100000, 'Fijo', 'MP', 'Pausado'), categoria: 'Hogar' },
+  { ...G(3, 'Super', 30000, 'Variable', 'MP'), categoria: 'Comida' },
+  { ...G(4, 'Pedidos', 12000, 'Variable', 'MP'), categoria: 'Comida' },
+]);
+await W.cerrarMes(W.__db, 'Octubre', 2026, '');
+let hc = null;
+try { hc = JSON.parse(W.__settsGuardados()['historico_categorias'] || 'null'); } catch (e) {}
+const claves = hc ? Object.keys(hc) : [];
+ok(claves.length === 1, 'guarda UN mes en historico_categorias', JSON.stringify(claves));
+const mesG = hc && hc[claves[0]];
+ok(mesG && mesG.Hogar === 400000, 'Hogar = 400.000 (Internet pausado NO suma)', mesG && String(mesG.Hogar));
+ok(mesG && mesG.Comida === 42000, 'Comida = 42.000 (30.000 + 12.000)', mesG && String(mesG.Comida));
 
 fs.unlinkSync(tmp);
 console.log('\n' + (fallas ? '*** ' + fallas + ' FALLAS ***' : 'TODAS LAS PRUEBAS PASAN'));

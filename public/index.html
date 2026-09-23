@@ -405,23 +405,37 @@ input::placeholder{color:var(--ink4)}
 .top-item .info .src{font-size:11px;color:var(--ink3);margin-top:2px}
 .top-item .amt{font-family:var(--mono);font-weight:600;font-size:13px;color:var(--ink);font-feature-settings:'tnum'}
 
-.donut-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin-top: 16px; }
-.legend-item { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--ink2); cursor: pointer;}
-.legend-item:hover { color: var(--ink); font-weight: 600; }
-.legend-color { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
 .legend-val { font-family: var(--mono); font-weight: 600; color: var(--ink); }
 
-.hist-chart{position:relative;width:100%;height:220px;margin:10px 0 0}
-.hist-chart svg{width:100%;height:100%;overflow:visible}
-.hist-chart .axis{stroke:var(--line);stroke-width:1}
-.hist-chart .grid{stroke:var(--line);stroke-width:.5;stroke-dasharray:3 4;opacity:.6}
-.hist-chart .line-ing{fill:none;stroke:var(--green);stroke-width:2}
-.hist-chart .line-gas{fill:none;stroke:var(--red);stroke-width:2}
-.hist-chart .dot-ing{fill:var(--green)} .hist-chart .dot-gas{fill:var(--red)}
-.hist-chart .x-label{font-size:10px;font-family:var(--mono);fill:var(--ink3)}
-.hist-legend{display:flex;justify-content:center;gap:18px;margin-top:8px;font-size:11px;color:var(--ink3);font-weight:500;text-transform:uppercase;letter-spacing:1px}
-.hist-legend .li{display:flex;align-items:center;gap:6px}
-.hist-legend .li .sw{width:10px;height:10px;border-radius:50%}
+/* Evolucion mensual: barras agrupadas por mes y series que se prenden/apagan. */
+.evo-chips{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 12px}
+.evo-chip{font-size:12px;padding:6px 11px;border-radius:999px;background:var(--bg2);color:var(--ink2);cursor:pointer;border:1.5px solid transparent;user-select:none;display:inline-flex;align-items:center;gap:6px;font-family:var(--body);transition:background .15s,border-color .15s,color .15s;width:auto}
+.evo-chip .sw{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+.evo-chip.on{border-color:var(--ink);color:var(--ink);font-weight:600;background:var(--paper)}
+.evo-chart{width:100%;margin:2px 0 0}
+.evo-chart svg{width:100%;height:auto;display:block;overflow:visible}
+.evo-chart .grid{stroke:var(--line);stroke-width:1;stroke-dasharray:3 5}
+.evo-chart .y-label{font-size:13px;font-family:var(--mono);fill:var(--ink3)}
+.evo-chart .x-label{font-size:14px;font-family:var(--mono);fill:var(--ink3)}
+.evo-chart .x-label.sel{fill:var(--ink);font-weight:700}
+.evo-chart .col{fill:transparent}
+.evo-chart .col.sel{fill:var(--bg2)}
+.evo-chart .mes{cursor:pointer}
+/* Las barras crecen desde abajo. transform-box hace que el origen sea la propia barra
+   y no el svg entero. */
+.evo-chart .bar{transform-box:fill-box;transform-origin:50% 100%;animation:evoUp .55s cubic-bezier(.2,.8,.2,1) both}
+.evo-chart .bar.sd{fill:none;stroke:var(--line-dark);stroke-width:1.5;stroke-dasharray:3 3}
+@keyframes evoUp{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+@media (prefers-reduced-motion:reduce){.evo-chart .bar{animation:none}}
+.evo-comp{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+.evo-comp .ec-title{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--ink3);font-weight:600;margin-bottom:6px}
+.evo-comp .ec-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:5px 0;font-size:13px}
+.evo-comp .ec-name{display:flex;align-items:center;gap:7px;color:var(--ink2);min-width:0}
+.evo-comp .ec-name.link{cursor:pointer;text-decoration:underline;text-decoration-color:var(--line-dark);text-underline-offset:3px}
+.evo-comp .ec-name .sw{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+.evo-comp .ec-val{font-family:var(--mono);font-weight:600;text-align:right;white-space:nowrap}
+.evo-comp .ec-d{font-size:11px;margin-left:6px}
+.evo-note{font-size:11px;color:var(--ink3);margin-top:8px;font-style:italic;line-height:1.45}
 
 /* Plantillas */
 .plantillas-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;padding:14px;background:var(--bg2);border-radius:var(--radius-sm);border:1px dashed var(--line-dark)}
@@ -607,15 +621,12 @@ input[type=checkbox]{appearance:auto;-webkit-appearance:checkbox;width:auto;padd
       </div>
     </div>
 
-    <div class="card" id="dashDonut" style="padding-bottom:10px;"></div>
-
-<div class="card" id="histCard" style="display:none">
-      <div class="card-title"><span class="icon">📈</span>Evolución mensual</div>
-      <div class="hist-chart"><svg id="histSvg" viewBox="0 0 600 220" preserveAspectRatio="none"></svg></div>
-      <div class="hist-legend">
-        <div class="li"><span class="sw" style="background:var(--green)"></span>Ingresos</div>
-        <div class="li"><span class="sw" style="background:var(--red)"></span>Gastos</div>
-      </div>
+    <div class="card" id="histCard" style="display:none">
+      <div class="card-title"><span class="icon">📊</span>Evolución mensual</div>
+      <div class="evo-chips" id="evoChips"></div>
+      <div class="evo-chart"><svg id="histSvg" viewBox="0 0 600 260"></svg></div>
+      <div class="evo-comp" id="evoComp"></div>
+      <div class="evo-note" id="evoNote"></div>
     </div>
 
     <div class="card" id="compCard" style="display:none">
@@ -1575,36 +1586,7 @@ function verDetalleCategoria(cat) {
 // Render: Resumen
 // =============================================================================
 function renderResumen() {
-  const catData = {};
-  let totalCats = 0;
-  activos(S.gastos).forEach(g => { catData[g.categoria] = (catData[g.categoria] || 0) + g.arsEquiv; totalCats += g.arsEquiv; });
-  const catArr = Object.keys(catData).map(k => ({name: k, val: catData[k]})).sort((a,b) => b.val - a.val);
-
-  if (totalCats > 0) {
-    let svg = `<svg viewBox="0 0 40 40" style="width:100%;max-width:200px;margin:0 auto;display:block;transform:rotate(-90deg);overflow:visible;">`;
-    svg += `<circle cx="20" cy="20" r="15.91549431" fill="transparent" stroke="var(--bg2)" stroke-width="4"></circle>`;
-    let offset = 0;
-    let legendHtml = '';
-    catArr.forEach((c, idx) => {
-      const ratio = (c.val / totalCats) * 100;
-      const color = CHART_COLORS[idx % CHART_COLORS.length];
-      if (ratio > 0) {
-        svg += `<circle cx="20" cy="20" r="15.91549431" fill="transparent" stroke="${color}" stroke-width="4" stroke-dasharray="${ratio} ${100 - ratio}" stroke-dashoffset="${-offset}"></circle>`;
-        offset += ratio;
-      }
-      const safeName = esc(c.name).replace(/'/g, "\\'");
-      legendHtml += `<div class="legend-item" onclick="verDetalleCategoria('${safeName}')"><div style="display:flex;align-items:center"><span class="legend-color" style="background:${color}"></span>${esc(c.name)} <span style="color:var(--ink4);margin-left:4px;font-size:10px">${ratio.toFixed(0)}%</span></div><div class="legend-val">${fmt(c.val)}</div></div>`;
-    });
-    svg += `</svg>`;
-    $('dashDonut').style.display = 'block';
-    $('dashDonut').innerHTML = `<div class="card-title"><span class="icon">🍩</span>Gastos por Categoría</div>
-      <div style="display:flex;justify-content:center;margin:16px 0;">${svg}</div>
-      <div class="donut-legend">${legendHtml}</div>`;
-  } else {
-    $('dashDonut').style.display = 'none';
-  }
-
-  renderHistChart();
+  renderEvolucion();
 
   const groups = [
     { name:'Tarjeta', subtitle:'VISA + Obligación Fija', icon:'💳', color:'#2A5680', origins:['VISA 5278','VISA 4305','Obligación Fija'] },
@@ -1649,29 +1631,165 @@ function renderResumen() {
   renderCompararMeses();
 }
 
-function renderHistChart() {
-  const data = (S.historico || []).slice(-6);
-  if (data.length < 2) { $('histCard').style.display = 'none'; return; }
-  $('histCard').style.display = 'block';
-  const W = 600, H = 220, pad = 32;
-  const max = Math.max(...data.map(d => Math.max(d.ingresos, d.gastos))) * 1.1;
-  const min = 0;
-  const x = i => pad + (i * (W - pad*2)) / (data.length - 1);
-  const y = v => H - pad - ((v - min) / (max - min || 1)) * (H - pad*2);
+// =============================================================================
+// Evolucion mensual — barras por mes, con series que se prenden y apagan
+// =============================================================================
+// `historico` guarda SOLO totales por mes. El desglose por categoria se empezo a guardar
+// en septiembre 2026 (cerrarMes lo escribe en `historicoCategorias`): los meses anteriores
+// no lo tienen y se dibujan como "sin datos", no como cero, porque cero seria mentir.
+const EVO = { series: ['__ing__', '__gas__'], mesSel: null };
+try {
+  const g = JSON.parse(localStorage.getItem('fin_evo_series') || 'null');
+  if (Array.isArray(g) && g.length) EVO.series = g;
+} catch (e) {}
 
-  let grid = '';
-  for (let i = 0; i <= 4; i++) {
-    const yy = pad + (i * (H - pad*2) / 4);
-    grid += `<line class="grid" x1="${pad}" y1="${yy}" x2="${W-pad}" y2="${yy}"/>`;
-  }
-  let pIng = data.map((d,i) => `${x(i)},${y(d.ingresos)}`).join(' ');
-  let pGas = data.map((d,i) => `${x(i)},${y(d.gastos)}`).join(' ');
-  let dotsIng = data.map((d,i) => `<circle class="dot-ing" cx="${x(i)}" cy="${y(d.ingresos)}" r="3"/>`).join('');
-  let dotsGas = data.map((d,i) => `<circle class="dot-gas" cx="${x(i)}" cy="${y(d.gastos)}" r="3"/>`).join('');
-  let labels = data.map((d,i) => `<text class="x-label" x="${x(i)}" y="${H - pad + 14}" text-anchor="middle">${esc(d.mes.replace(/(\w{3})\w*/, '$1'))}</text>`).join('');
-
-  $('histSvg').innerHTML = grid + `<polyline class="line-ing" points="${pIng}"/><polyline class="line-gas" points="${pGas}"/>` + dotsIng + dotsGas + labels;
+function evoMeses() {
+  const hc = S.historicoCategorias || {};
+  const meses = (S.historico || []).map(h => {
+    const mes = String(h.mes || '').trim();
+    return { mes, ingresos: +h.ingresos || 0, gastos: +h.gastos || 0, cats: hc[h.mes] || hc[mes] || null, actual: false };
+  });
+  // El mes en curso sale en vivo de los gastos cargados (pausados afuera).
+  const cats = {};
+  activos(S.gastos).forEach(g => { const c = g.categoria || 'Otros'; cats[c] = (cats[c] || 0) + (g.arsEquiv || 0); });
+  const act = mesActualDelTitulo();
+  const d = S.dashboard || {};
+  meses.push({
+    mes: act ? act.texto : 'Mes actual',
+    ingresos: +d.totalIngresos || 0, gastos: +d.totalGastos || 0, cats, actual: true,
+  });
+  return meses.slice(-6);
 }
+
+function evoDefs(meses) {
+  const vistas = new Set();
+  meses.forEach(m => m.cats && Object.keys(m.cats).forEach(c => vistas.add(c)));
+  // Orden estable: primero las categorias configuradas, despues las que aparezcan.
+  const cats = [...(S.categorias || [])];
+  vistas.forEach(c => { if (!cats.includes(c)) cats.push(c); });
+  return [
+    { id: '__ing__', nombre: 'Ingresos', color: 'var(--green)', val: m => m.ingresos, subeBien: true },
+    { id: '__gas__', nombre: 'Gastos', color: 'var(--red)', val: m => m.gastos },
+    ...cats.map((c, i) => ({
+      id: c, nombre: c, color: CHART_COLORS[i % CHART_COLORS.length], cat: true,
+      val: m => (m.cats ? (m.cats[c] || 0) : null),
+    })),
+  ];
+}
+
+// Hasta 4 series a la vez: con mas, las barras de un mes quedan finitas como fideos.
+function evoToggle(id) {
+  const i = EVO.series.indexOf(id);
+  if (i >= 0) { if (EVO.series.length > 1) EVO.series.splice(i, 1); }
+  else { if (EVO.series.length >= 4) EVO.series.shift(); EVO.series.push(id); }
+  try { localStorage.setItem('fin_evo_series', JSON.stringify(EVO.series)); } catch (e) {}
+  renderEvolucion();
+}
+
+function evoSel(i) { EVO.mesSel = i; renderEvolucion({ sinAnimar: true }); }
+
+function evoCorto(v) {
+  const a = Math.abs(v);
+  if (a >= 1e6) return '$' + (v / 1e6).toFixed(1).replace('.', ',') + 'M';
+  if (a >= 1e3) return '$' + Math.round(v / 1e3) + 'k';
+  return '$' + Math.round(v);
+}
+
+function renderEvolucion(opts) {
+  const card = $('histCard');
+  if (!card) return;
+  const meses = evoMeses();
+  if (!meses.length) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+
+  const defs = evoDefs(meses);
+  EVO.series = EVO.series.filter(id => defs.some(d => d.id === id));
+  if (!EVO.series.length) EVO.series = ['__ing__', '__gas__'];
+  const series = EVO.series.map(id => defs.find(d => d.id === id));
+  if (EVO.mesSel == null || EVO.mesSel >= meses.length) EVO.mesSel = meses.length - 1;
+
+  $('evoChips').innerHTML = defs.map(d =>
+    `<button type="button" class="evo-chip${EVO.series.includes(d.id) ? ' on' : ''}" data-id="${esc(d.id)}" onclick="evoToggle(this.dataset.id)">` +
+    `<span class="sw" style="background:${d.color}"></span>${esc(d.nombre)}</button>`).join('');
+
+  // ---- geometria ----
+  const W = 600, H = 260, pl = 58, pr = 6, pt = 12, pb = 34;
+  const n = meses.length, k = series.length;
+  const gw = (W - pl - pr) / n;
+  const bw = Math.min(30, (gw * 0.74) / k);
+  const valores = [];
+  meses.forEach(m => series.forEach(s => { const v = s.val(m); if (v != null) valores.push(v); }));
+  const max = (Math.max(0, ...valores) || 1) * 1.12;
+  const y = v => pt + (1 - v / max) * (H - pt - pb);
+  const base = y(0);
+
+  let svg = '';
+  for (let i = 0; i <= 4; i++) {
+    const v = (max / 4) * i, yy = y(v);
+    svg += `<line class="grid" x1="${pl}" y1="${yy}" x2="${W - pr}" y2="${yy}"/>` +
+           `<text class="y-label" x="${pl - 8}" y="${yy + 4}" text-anchor="end">${evoCorto(v)}</text>`;
+  }
+
+  const animar = !(opts && opts.sinAnimar);
+  meses.forEach((m, i) => {
+    const x0 = pl + i * gw;
+    const sel = i === EVO.mesSel;
+    let g = `<g class="mes" onclick="evoSel(${i})">` +
+            `<rect class="col${sel ? ' sel' : ''}" x="${x0 + 2}" y="${pt}" width="${gw - 4}" height="${base - pt}" rx="8"/>`;
+    const xs = x0 + (gw - bw * k) / 2;
+    series.forEach((s, j) => {
+      const v = s.val(m);
+      const bx = xs + j * bw + 1;
+      const delay = animar ? `animation-delay:${(i * k + j) * 35}ms;` : 'animation:none;';
+      if (v == null) {
+        // Mes sin desglose por categoria: contorno punteado, no una barra en cero.
+        g += `<rect class="bar sd" x="${bx}" y="${base - 22}" width="${bw - 2}" height="22" rx="3" style="${delay}">` +
+             `<title>${esc(m.mes)} · ${esc(s.nombre)}: sin datos</title></rect>`;
+      } else {
+        const h = Math.max(1.5, base - y(v));
+        g += `<rect class="bar" x="${bx}" y="${base - h}" width="${bw - 2}" height="${h}" rx="3" style="fill:${s.color};${delay}">` +
+             `<title>${esc(m.mes)} · ${esc(s.nombre)}: ${fmt(v)}</title></rect>`;
+      }
+    });
+    const lbl = m.mes.replace(/^(\S{3})\S*\s+\d{2}(\d{2})$/, '$1 $2');
+    g += `<text class="x-label${sel ? ' sel' : ''}" x="${x0 + gw / 2}" y="${H - 10}" text-anchor="middle">${esc(lbl)}${m.actual ? '*' : ''}</text></g>`;
+    svg += g;
+  });
+  $('histSvg').innerHTML = svg;
+
+  // ---- comparacion: mes elegido vs el anterior ----
+  const m = meses[EVO.mesSel], prev = meses[EVO.mesSel - 1];
+  let comp = `<div class="ec-title">${esc(m.mes)}${m.actual ? ' (en curso)' : ''}${prev ? ' vs ' + esc(prev.mes) : ''}</div>`;
+  series.forEach(s => {
+    const v = s.val(m), pv = prev ? s.val(prev) : null;
+    let delta = '';
+    if (v != null && pv != null) {
+      const d = v - pv;
+      const pct = pv !== 0 ? Math.round((d / Math.abs(pv)) * 100) + '%' : '—';
+      const bien = s.subeBien ? d > 0 : d < 0;
+      const color = d === 0 ? 'var(--ink3)' : (bien ? 'var(--green)' : 'var(--red)');
+      const flecha = d > 0 ? '↑' : (d < 0 ? '↓' : '→');
+      delta = `<span class="ec-d" style="color:${color}">${flecha} ${fmt(Math.abs(d))} (${pct})</span>`;
+    } else if (prev && pv == null && v != null) {
+      delta = `<span class="ec-d" style="color:var(--ink3)">sin dato previo</span>`;
+    }
+    // En el mes en curso, tocar una categoria abre su detalle (reemplaza lo que hacia el donut).
+    const link = m.actual && s.cat;
+    comp += `<div class="ec-row"><span class="ec-name${link ? ' link' : ''}"${link ? ` data-cat="${esc(s.id)}" onclick="verDetalleCategoria(this.dataset.cat)"` : ''}>` +
+            `<span class="sw" style="background:${s.color}"></span>${esc(s.nombre)}</span>` +
+            `<span class="ec-val">${v == null ? 'sin datos' : fmt(v)}${delta}</span></div>`;
+  });
+  $('evoComp').innerHTML = comp;
+
+  const notas = [];
+  if (m.actual) notas.push('* Mes en curso: los números son parciales hasta el cierre.');
+  const sinCats = meses.filter(x => !x.cats).map(x => x.mes);
+  if (series.some(s => s.cat) && sinCats.length) {
+    notas.push(`${sinCats.join(', ')} no tienen desglose por categoría: se guarda a partir del próximo cierre de mes.`);
+  }
+  $('evoNote').innerHTML = notas.map(esc).join('<br>');
+}
+
 
 // =============================================================================
 // Nuevo gasto
