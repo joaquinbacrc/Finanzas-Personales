@@ -1667,6 +1667,10 @@ function evoMeses() {
   return meses.slice(-6);
 }
 
+// Paleta de categorias SIN el verde ni el rojo: esos son de Ingresos y Gastos, y con
+// CHART_COLORS Transporte salia verde y Suscripciones roja, indistinguibles al comparar.
+const EVO_COLORES_CAT = ['#2A5680', '#9C7F4E', '#3A7C8C', '#D9A05B', '#6B5B95', '#7A918D', '#5A5751', '#B07A9E'];
+
 function evoDefs(meses) {
   const vistas = new Set();
   meses.forEach(m => m.cats && Object.keys(m.cats).forEach(c => vistas.add(c)));
@@ -1677,7 +1681,7 @@ function evoDefs(meses) {
     { id: '__ing__', nombre: 'Ingresos', color: 'var(--green)', val: m => m.ingresos, subeBien: true },
     { id: '__gas__', nombre: 'Gastos', color: 'var(--red)', val: m => m.gastos },
     ...cats.map((c, i) => ({
-      id: c, nombre: c, color: CHART_COLORS[i % CHART_COLORS.length], cat: true,
+      id: c, nombre: c, color: EVO_COLORES_CAT[i % EVO_COLORES_CAT.length], cat: true,
       val: m => (m.cats ? (m.cats[c] || 0) : null),
     })),
   ];
@@ -1696,7 +1700,7 @@ function evoSel(i) { EVO.mesSel = i; renderEvolucion({ sinAnimar: true }); }
 
 function evoCorto(v) {
   const a = Math.abs(v);
-  if (a >= 1e6) return '$' + (v / 1e6).toFixed(1).replace('.', ',') + 'M';
+  if (a >= 1e6) return '$' + (v / 1e6).toFixed(1).replace(/\.0$/, '').replace('.', ',') + 'M';
   if (a >= 1e3) return '$' + Math.round(v / 1e3) + 'k';
   return '$' + Math.round(v);
 }
@@ -1725,13 +1729,18 @@ function renderEvolucion(opts) {
   const bw = Math.min(30, (gw * 0.74) / k);
   const valores = [];
   meses.forEach(m => series.forEach(s => { const v = s.val(m); if (v != null) valores.push(v); }));
-  const max = (Math.max(0, ...valores) || 1) * 1.12;
+  // Escalon "lindo" (1, 2, 2.5 o 5 x 10^n) para que el eje diga $1M, $2M... y no
+  // $985k o $2,0M como salia dividiendo el maximo en 4.
+  const bruto = (Math.max(0, ...valores) || 1) / 4;
+  const mag = Math.pow(10, Math.floor(Math.log10(bruto)));
+  const paso = [1, 2, 2.5, 5, 10].map(f => f * mag).find(v => v >= bruto);
+  const max = paso * 4;
   const y = v => pt + (1 - v / max) * (H - pt - pb);
   const base = y(0);
 
   let svg = '';
   for (let i = 0; i <= 4; i++) {
-    const v = (max / 4) * i, yy = y(v);
+    const v = paso * i, yy = y(v);
     svg += `<line class="grid" x1="${pl}" y1="${yy}" x2="${W - pr}" y2="${yy}"/>` +
            `<text class="y-label" x="${pl - 8}" y="${yy + 4}" text-anchor="end">${evoCorto(v)}</text>`;
   }
