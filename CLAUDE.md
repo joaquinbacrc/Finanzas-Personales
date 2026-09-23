@@ -116,12 +116,20 @@ Esto no estaba documentado y es la fuente de los peores malentendidos de la app.
   No filtra ni define nada: es solo lo que se muestra.
 - **`historico` guarda solo 7 números agregados** por mes cerrado (ingresos, gastos, margen,
   pct_variable, sobrantes). **No guarda el detalle de los gastos.**
+- **`settings.historico_categorias`** guarda el **desglose por categoría** de cada mes cerrado,
+  como JSON: `{ "Septiembre 2026": { "Comida": 120000, "Hogar": 450000, ... } }` (montos de
+  ejemplo, no reales). Ver
+  la sección "Desglose por categoría" más abajo. **Existe desde septiembre 2026**: mayo–agosto
+  no lo tienen y no se puede recuperar.
+- **`estado` tiene tres valores**: `Pagado`, `Pendiente` y **`Pausado`**. Ver "Gastos pausados".
 
 ### `cerrarMes()` es destructivo
 
-Escribe el resumen en `historico`, borra los gastos que contabilizó y reinserta **solo los de
+Escribe el resumen en `historico` **y el desglose por categoría en
+`settings.historico_categorias`**, borra los gastos que contabilizó y reinserta **solo los de
 tipo `Fijo`**, con la fecha reescrita a `01/MM/AAAA` del mes nuevo y estado `Pendiente` (las
-cuotas avanzan `n/total`). Los `Variable` se descartan.
+cuotas avanzan `n/total`, **también las de un gasto pausado**). Los `Variable` se descartan.
+Los gastos **pausados no suman** ni al histórico ni al desglose.
 
 > **El detalle de cada mes cerrado se pierde para siempre.** Conviene exportar el CSV antes
 > (Config → Exportar a CSV, o el botón "CSV" en el header de Resumen).
@@ -168,6 +176,63 @@ SELECT substr(fecha,7,4) AS anio, substr(fecha,4,2) AS mes, moneda, COUNT(*) AS 
 FROM gastos GROUP BY anio, mes, moneda ORDER BY anio, mes, moneda;
 ```
 
+## Desglose por categoría (`historico_categorias`)
+
+**Qué es.** `historico` guarda 7 números por mes y el detalle se borra en el cierre, así que sin
+esto no hay forma de comparar categorías mes a mes. `cerrarMes` calcula, **antes de borrar**,
+cuánto se gastó en cada categoría (sin los pausados, en ARS equivalente) y lo guarda en
+`settings.historico_categorias` con **la misma clave que `historico.mes`** (`"Septiembre 2026"`).
+`getAllData` lo manda al front como `historicoCategorias`.
+
+**Por qué en `settings` y no en una columna/tabla nueva:** eso exigía `ALTER TABLE`, y las
+credenciales de esta PC no llegan a la cuenta Cloudflare donde vive la D1. `settings` es
+clave/valor texto y ya existía: cero migración.
+
+**Límites que no hay que olvidar:**
+- **Mayo–agosto 2026 NO tienen desglose y no se puede reconstruir**: se borró en cada cierre.
+  El gráfico los muestra como contorno punteado "sin datos", **nunca como barra en cero**
+  (cero sería mentir).
+- El **mes en curso** no está en `historico_categorias`: el front lo calcula en vivo desde los
+  gastos cargados. Recién al cerrar el mes queda guardado.
+- Si se renombra una categoría, los meses viejos conservan el nombre viejo: son claves distintas.
+- **Nunca commitear los datos** (un dump de `historico_categorias`, un CSV, etc.): **el repo es
+  público**.
+
+Probado en `tools/test-gasto-pausado.mjs` (caso 6): el cierre guarda el mes, Comida suma bien y
+un gasto pausado no entra.
+
+## Gastos pausados (`estado = 'Pausado'`)
+
+Un gasto **Fijo** se puede pausar un mes con el botón de pausa de su card: sigue en la lista
+(atenuado, monto tachado, badge "Pausado") pero **no cuenta en ningún total**. Al cerrar el mes
+**vuelve activo solo**, porque `cerrarMes` reinserta los fijos como `Pendiente`.
+
+- **La cuota avanza igual aunque esté pausado.** Pausar NO significa "no lo pago": es sacarlo
+  del total del mes por un motivo del usuario. (Una primera versión frenaba la cuota y el
+  usuario la hizo revertir.)
+- **El dashboard se calcula DOS veces** —`computeDashboard` en `worker.js` y `recalcDashboard`
+  en el front— y las dos excluyen pausados con `esPausado()`. Si se toca una sola, el número
+  cambia al instante y vuelve al viejo en el próximo F5.
+- En `cerrarMes` el pausado **se saltea en las sumas pero NO en la reinserción** del fijo, y su
+  id **sigue en `idsContabilizados`** (sacarlo aborta el cierre por la verificación de borrados).
+- La card atenúa el **contenido**, no la card: la animación `cardIn` tiene `fill-mode forwards`
+  y deja `opacity:1` fijo en la card.
+
+## Resumen: Evolución mensual
+
+Una sola card: barras por mes (últimos 6 + el en curso, marcado con `*`), chips para prender
+series (Ingresos, Gastos y cada categoría, máx. 4, se recuerda en `localStorage`) y debajo la
+comparación del mes elegido **vs cualquier otro** (selector "vs"; por defecto el anterior):
+Ingresos, Gastos, Margen y % Variable siempre, y las categorías prendidas. Reemplazó al donut
+"Gastos por categoría" y a la card "Comparar meses", que se sacaron.
+
+- Categorías con paleta propia **sin verde ni rojo** (`EVO_COLORES_CAT`): son de Ingresos y
+  Gastos, y con `CHART_COLORS` Transporte y Suscripciones salían iguales a ellos.
+- Eje Y con escalones redondos (1/2/2,5/5 × 10ⁿ).
+- `renderEvolucion` va en `try/catch` dentro de `renderResumen`: si falla, no se lleva puesto el
+  resto del Resumen y el error queda visible en la card.
+- En el mes en curso, tocar una categoría abre `verDetalleCategoria` (lo único que hacía el donut).
+
 ## Decisiones técnicas tomadas (con razones)
 
 - **`node:sqlite` en vez de `better-sqlite3`**: better-sqlite3 requiere compilación nativa (Python + node-gyp). En Windows del usuario falló por falta de Python. node:sqlite es built-in en Node ≥22.5, sin deps.
@@ -185,6 +250,10 @@ FROM gastos GROUP BY anio, mes, moneda ORDER BY anio, mes, moneda;
 - [public/sw.js](public/sw.js) — service worker. **No intercepta navegaciones, a propósito**
   (ver la sección del SW más abajo)
 - [tools/check-worker.mjs](tools/check-worker.mjs) — guardrail `npm run check:worker`
+- [tools/test-gasto-pausado.mjs](tools/test-gasto-pausado.mjs) — pausa + cierre + desglose,
+  sobre el código REAL de `worker.js` (21 pruebas). Correr antes de tocar `cerrarMes`
+- [tools/test-importador-tarjeta.mjs](tools/test-importador-tarjeta.mjs) — importador del resumen
+  de tarjeta contra el Excel real
 
 ### Legado de Railway (NO corre en producción)
 
