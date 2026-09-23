@@ -428,7 +428,11 @@ input::placeholder{color:var(--ink4)}
 @keyframes evoUp{from{transform:scaleY(0)}to{transform:scaleY(1)}}
 @media (prefers-reduced-motion:reduce){.evo-chart .bar{animation:none}}
 .evo-comp{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
-.evo-comp .ec-title{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--ink3);font-weight:600;margin-bottom:6px}
+.evo-comp .ec-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap}
+.evo-comp .ec-title{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--ink3);font-weight:600}
+.evo-comp .ec-ref{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ink3);text-transform:none;letter-spacing:0;margin:0;font-weight:500}
+.evo-comp .ec-ref select{width:auto;padding:6px 26px 6px 10px;font-size:12px}
+.evo-comp .ec-sub{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--ink3);font-weight:600;margin:10px 0 2px;padding-top:8px;border-top:1px dashed var(--line)}
 .evo-comp .ec-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:5px 0;font-size:13px}
 .evo-comp .ec-name{display:flex;align-items:center;gap:7px;color:var(--ink2);min-width:0}
 .evo-comp .ec-name.link{cursor:pointer;text-decoration:underline;text-decoration-color:var(--line-dark);text-underline-offset:3px}
@@ -627,12 +631,6 @@ input[type=checkbox]{appearance:auto;-webkit-appearance:checkbox;width:auto;padd
       <div class="evo-chart"><svg id="histSvg" viewBox="0 0 600 260"></svg></div>
       <div class="evo-comp" id="evoComp"></div>
       <div class="evo-note" id="evoNote"></div>
-    </div>
-
-    <div class="card" id="compCard" style="display:none">
-      <div class="card-title"><span class="icon">⇄</span>Comparar meses</div>
-      <div class="form-row" style="margin-bottom:14px"><select id="compMesA"></select><select id="compMesB"></select></div>
-      <div id="compResult"></div>
     </div>
 
     <div class="totals-banner">
@@ -1246,45 +1244,6 @@ function aplicarUrlParams() {
 // =============================================================================
 // Comparativa de meses
 // =============================================================================
-function renderCompararMeses() {
-  if (!S.historico || S.historico.length < 2) { $('compCard').style.display = 'none'; return; }
-  $('compCard').style.display = 'block';
-  const opts = S.historico.map((h, i) => `<option value="${i}">${esc(h.mes)}</option>`).join('');
-  $('compMesA').innerHTML = opts;
-  $('compMesB').innerHTML = opts;
-  $('compMesA').value = S.historico.length - 2;
-  $('compMesB').value = S.historico.length - 1;
-  $('compMesA').onchange = compararMeses;
-  $('compMesB').onchange = compararMeses;
-  compararMeses();
-}
-
-function compararMeses() {
-  const a = S.historico[+$('compMesA').value];
-  const b = S.historico[+$('compMesB').value];
-  if (!a || !b) { $('compResult').innerHTML = ''; return; }
-  const diffEl = (av, bv) => {
-    const d = bv - av;
-    const pct = av !== 0 ? ((d / Math.abs(av)) * 100).toFixed(0) + '%' : '—';
-    const color = d > 0 ? 'var(--red)' : (d < 0 ? 'var(--green)' : 'var(--ink3)');
-    const arrow = d > 0 ? '↑' : (d < 0 ? '↓' : '→');
-    return `<span style="color:${color};font-family:var(--mono);font-weight:600;font-size:12px">${arrow} ${fmt(Math.abs(d))} (${pct})</span>`;
-  };
-  const row = (label, av, bv, isPct) => `
-    <div class="dash-row" style="flex-wrap:wrap;gap:8px">
-      <span class="dl">${esc(label)}</span>
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        <span class="dv">${isPct ? av.toFixed(1) + '%' : fmt(av)} → ${isPct ? bv.toFixed(1) + '%' : fmt(bv)}</span>
-        ${!isPct ? diffEl(av, bv) : ''}
-      </div>
-    </div>`;
-  $('compResult').innerHTML =
-    row('Ingresos', a.ingresos, b.ingresos) +
-    row('Gastos', a.gastos, b.gastos) +
-    row('Margen', a.margen, b.margen) +
-    row('% Variable', a.pctVariable, b.pctVariable, true);
-}
-
 function toggleExp(row) {
   const div = $('exp-' + row);
   if (!div) return;
@@ -1634,7 +1593,6 @@ function renderResumen() {
   const sorted = activos(S.gastos).sort((a,b) => b.arsEquiv - a.arsEquiv).slice(0, 5);
   $('topGastos').innerHTML = sorted.map((g, i) => `<div class="top-item"><span class="rank">#${i+1}</span><div class="info"><div class="motivo">${esc(g.motivo)}${g.cuota ? ' <span class="cuota-tag">'+esc(g.cuota)+'</span>' : ''}</div><div class="src">${esc(g.imputar)} · ${esc(g.tipo)}</div></div><span class="amt">${fmt(g.arsEquiv)}</span></div>`).join('') || '<div style="text-align:center;padding:20px;color:var(--ink3);font-style:italic">Sin gastos</div>';
 
-  renderCompararMeses();
 }
 
 // =============================================================================
@@ -1643,7 +1601,9 @@ function renderResumen() {
 // `historico` guarda SOLO totales por mes. El desglose por categoria se empezo a guardar
 // en septiembre 2026 (cerrarMes lo escribe en `historicoCategorias`): los meses anteriores
 // no lo tienen y se dibujan como "sin datos", no como cero, porque cero seria mentir.
-const EVO = { series: ['__ing__', '__gas__'], mesSel: null };
+// mesRef: contra que mes se compara. null = el anterior al elegido. Se puede elegir
+// cualquier otro, que es lo que hacia la card 'Comparar meses' que se unifico aca.
+const EVO = { series: ['__ing__', '__gas__'], mesSel: null, mesRef: null };
 try {
   const g = JSON.parse(localStorage.getItem('fin_evo_series') || 'null');
   if (Array.isArray(g) && g.length) EVO.series = g;
@@ -1653,7 +1613,8 @@ function evoMeses() {
   const hc = S.historicoCategorias || {};
   const meses = (S.historico || []).map(h => {
     const mes = String(h.mes || '').trim();
-    return { mes, ingresos: +h.ingresos || 0, gastos: +h.gastos || 0, cats: hc[h.mes] || hc[mes] || null, actual: false };
+    return { mes, ingresos: +h.ingresos || 0, gastos: +h.gastos || 0, margen: +h.margen || 0,
+             pctVariable: parseFloat(h.pctVariable) || 0, cats: hc[h.mes] || hc[mes] || null, actual: false };
   });
   // El mes en curso sale en vivo de los gastos cargados (pausados afuera).
   const cats = {};
@@ -1662,7 +1623,9 @@ function evoMeses() {
   const d = S.dashboard || {};
   meses.push({
     mes: act ? act.texto : 'Mes actual',
-    ingresos: +d.totalIngresos || 0, gastos: +d.totalGastos || 0, cats, actual: true,
+    ingresos: +d.totalIngresos || 0, gastos: +d.totalGastos || 0, margen: +d.margen || 0,
+    // pctVariable llega como texto ('35.8') desde el dashboard.
+    pctVariable: parseFloat(d.pctVariable) || 0, cats, actual: true,
   });
   return meses.slice(-6);
 }
@@ -1696,7 +1659,8 @@ function evoToggle(id) {
   renderEvolucion();
 }
 
-function evoSel(i) { EVO.mesSel = i; renderEvolucion({ sinAnimar: true }); }
+function evoSel(i) { EVO.mesSel = i; EVO.mesRef = null; renderEvolucion({ sinAnimar: true }); }
+function evoRefSel(v) { EVO.mesRef = v === '' ? null : +v; renderEvolucion({ sinAnimar: true }); }
 
 function evoCorto(v) {
   const a = Math.abs(v);
@@ -1772,28 +1736,59 @@ function renderEvolucion(opts) {
   });
   $('histSvg').innerHTML = svg;
 
-  // ---- comparacion: mes elegido vs el anterior ----
-  const m = meses[EVO.mesSel], prev = meses[EVO.mesSel - 1];
-  let comp = `<div class="ec-title">${esc(m.mes)}${m.actual ? ' (en curso)' : ''}${prev ? ' vs ' + esc(prev.mes) : ''}</div>`;
-  series.forEach(s => {
-    const v = s.val(m), pv = prev ? s.val(prev) : null;
-    let delta = '';
-    if (v != null && pv != null) {
-      const d = v - pv;
-      const pct = pv !== 0 ? Math.round((d / Math.abs(pv)) * 100) + '%' : '—';
-      const bien = s.subeBien ? d > 0 : d < 0;
-      const color = d === 0 ? 'var(--ink3)' : (bien ? 'var(--green)' : 'var(--red)');
-      const flecha = d > 0 ? '↑' : (d < 0 ? '↓' : '→');
-      delta = `<span class="ec-d" style="color:${color}">${flecha} ${fmt(Math.abs(d))} (${pct})</span>`;
-    } else if (prev && pv == null && v != null) {
-      delta = `<span class="ec-d" style="color:var(--ink3)">sin dato previo</span>`;
-    }
-    // En el mes en curso, tocar una categoria abre su detalle (reemplaza lo que hacia el donut).
-    const link = m.actual && s.cat;
-    comp += `<div class="ec-row"><span class="ec-name${link ? ' link' : ''}"${link ? ` data-cat="${esc(s.id)}" onclick="verDetalleCategoria(this.dataset.cat)"` : ''}>` +
-            `<span class="sw" style="background:${s.color}"></span>${esc(s.nombre)}</span>` +
-            `<span class="ec-val">${v == null ? 'sin datos' : fmt(v)}${delta}</span></div>`;
-  });
+  // ---- comparacion: mes elegido vs otro (por defecto, el anterior) ----
+  // Unifica lo que antes era la card "Comparar meses": siempre muestra Ingresos, Gastos,
+  // Margen y % Variable, y abajo las categorias que esten prendidas en el grafico.
+  const m = meses[EVO.mesSel];
+  let iRef = EVO.mesRef;
+  if (iRef == null || iRef === EVO.mesSel || iRef < 0 || iRef >= meses.length) iRef = EVO.mesSel - 1;
+  const prev = iRef >= 0 ? meses[iRef] : null;
+
+  const delta = (v, pv, subeBien) => {
+    if (v == null || pv == null) return prev && v != null ? '<span class="ec-d" style="color:var(--ink3)">sin dato previo</span>' : '';
+    const d = v - pv;
+    const pct = pv !== 0 ? Math.round((d / Math.abs(pv)) * 100) + '%' : '—';
+    const bien = subeBien ? d > 0 : d < 0;
+    const color = d === 0 ? 'var(--ink3)' : (bien ? 'var(--green)' : 'var(--red)');
+    const flecha = d > 0 ? '↑' : (d < 0 ? '↓' : '→');
+    return `<span class="ec-d" style="color:${color}">${flecha} ${fmt(Math.abs(d))} (${pct})</span>`;
+  };
+  // % Variable: la diferencia va en puntos porcentuales y sin color, porque que suba o
+  // baje la parte variable no es bueno ni malo en si mismo.
+  const deltaPP = (v, pv) => {
+    if (pv == null) return '';
+    const d = v - pv;
+    const flecha = d > 0 ? '↑' : (d < 0 ? '↓' : '→');
+    return `<span class="ec-d" style="color:var(--ink3)">${flecha} ${Math.abs(d).toFixed(1).replace('.', ',')} pp</span>`;
+  };
+  const fila = (nombre, color, valor, deltaHtml, extra) =>
+    `<div class="ec-row"><span class="ec-name${extra ? ' ' + extra.cls : ''}"${extra ? extra.attrs : ''}>` +
+    `<span class="sw" style="background:${color}"></span>${esc(nombre)}</span>` +
+    `<span class="ec-val">${valor}${deltaHtml}</span></div>`;
+
+  const refOpts = meses.map((x, i) => i === EVO.mesSel ? '' :
+    `<option value="${i}"${i === iRef ? ' selected' : ''}>${esc(x.mes)}${x.actual ? ' (en curso)' : ''}</option>`).join('');
+
+  let comp = `<div class="ec-head"><span class="ec-title">${esc(m.mes)}${m.actual ? ' (en curso)' : ''}</span>` +
+             (meses.length > 1 ? `<label class="ec-ref">vs <select onchange="evoRefSel(this.value)">${refOpts}</select></label>` : '') +
+             `</div>`;
+
+  comp += fila('Ingresos', 'var(--green)', fmt(m.ingresos), delta(m.ingresos, prev && prev.ingresos, true));
+  comp += fila('Gastos', 'var(--red)', fmt(m.gastos), delta(m.gastos, prev && prev.gastos, false));
+  comp += fila('Margen', 'var(--ink3)', fmt(m.margen), delta(m.margen, prev && prev.margen, true));
+  comp += fila('% Variable', 'var(--line-dark)', m.pctVariable.toFixed(1).replace('.', ',') + '%',
+               deltaPP(m.pctVariable, prev && prev.pctVariable));
+
+  const catsOn = series.filter(x => x.cat);
+  if (catsOn.length) {
+    comp += `<div class="ec-sub">Categorías</div>`;
+    catsOn.forEach(x => {
+      const v = x.val(m), pv = prev ? x.val(prev) : null;
+      // En el mes en curso, tocar una categoria abre su detalle (lo que hacia el donut).
+      const link = m.actual ? { cls: 'link', attrs: ` data-cat="${esc(x.id)}" onclick="verDetalleCategoria(this.dataset.cat)"` } : null;
+      comp += fila(x.nombre, x.color, v == null ? 'sin datos' : fmt(v), v == null ? '' : delta(v, pv, false), link);
+    });
+  }
   $('evoComp').innerHTML = comp;
 
   const notas = [];
