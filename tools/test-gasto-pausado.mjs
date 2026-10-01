@@ -158,6 +158,32 @@ const mesG = hc && hc[claves[0]];
 ok(mesG && mesG.Hogar === 400000, 'Hogar = 400.000 (Internet pausado NO suma)', mesG && String(mesG.Hogar));
 ok(mesG && mesG.Comida === 42000, 'Comida = 42.000 (30.000 + 12.000)', mesG && String(mesG.Comida));
 
+console.log('\n=== 7. la ultima cuota (n/n) termina: NO pasa al mes nuevo ===');
+const conCuotas = [
+  G(1, 'Heladera', 90000, 'Fijo', 'VISA 5278', 'Pagado', '12/12'),
+  G(2, 'Colchon', 40000, 'Fijo', 'VISA 5278', 'Pausado', '3/3'),
+  G(3, 'Notebook', 70000, 'Fijo', 'VISA 5278', 'Pagado', '5/12'),
+  G(4, 'Alquiler', 400000, 'Fijo', 'MP'),
+  G(5, 'Raro', 1000, 'Fijo', 'MP', 'Pagado', '0/0'),
+];
+W.__set(conCuotas);
+const pv7 = await W.previewCierreMes(W.__db);
+ok(pv7.cuotasTerminan === 2, 'el preview cuenta 2 que terminan (pausada incluida)', String(pv7.cuotasTerminan));
+ok(pv7.cuotasAvanzan === 1, 'y 1 que avanza (pero no la mal escrita 0/0)', String(pv7.cuotasAvanzan));
+ok(pv7.fijosPasan === 3, 'pasan 3 fijos: Notebook, Alquiler y Raro', String(pv7.fijosPasan));
+ok((pv7.terminanNombres || []).join('|') === 'Heladera (12/12)|Colchon (3/3)', 'nombra las que terminan',
+   JSON.stringify(pv7.terminanNombres));
+W.__set(conCuotas);
+const res7 = await W.cerrarMes(W.__db, 'Octubre', 2026, '');
+ok(res7 && res7.success === true, 'el cierre no aborta');
+const mot7 = W.__ins().map((a) => a[1]);
+ok(!mot7.includes('Heladera'), 'la 12/12 NO se reinserta', mot7.join(', '));
+ok(!mot7.includes('Colchon'), 'la 3/3 pausada tampoco');
+ok(mot7.length === 3 && mot7.includes('Notebook') && mot7.includes('Alquiler') && mot7.includes('Raro'),
+   'pasan los otros 3; una cuota mal escrita no hace desaparecer el gasto');
+ok(W.__ins().find((a) => a[1] === 'Notebook')[7] === '6/12', 'la 5/12 avanza a 6/12');
+ok(W.__borr().length === 5, 'se borran los 5 del mes viejo', String(W.__borr().length));
+
 fs.unlinkSync(tmp);
 console.log('\n' + (fallas ? '*** ' + fallas + ' FALLAS ***' : 'TODAS LAS PRUEBAS PASAN'));
 process.exit(fallas ? 1 : 0);

@@ -2573,7 +2573,7 @@ function cerrarMesFront() {
         <div style="font-size:13px;color:var(--ink2);line-height:1.7">
           <div>• <strong>${p.fijosPasan}</strong> gastos fijos pasan al nuevo mes (estado Pendiente).</div>
           <div>• <strong>${p.variablesBorran}</strong> variables se borran.</div>
-          <div>• <strong>${p.cuotasAvanzan}</strong> cuotas avanzan, ${p.cuotasTerminan} terminan.</div>
+          <div>• <strong>${p.cuotasAvanzan}</strong> cuotas avanzan, ${p.cuotasTerminan} terminan${(p.terminanNombres || []).length ? ' y <strong>se eliminan</strong>: ' + p.terminanNombres.map(esc).join(', ') : ''}.</div>
           <div>• Se hace <strong>backup</strong> automático del mes actual.</div>
         </div>
       `;

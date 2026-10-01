@@ -168,6 +168,14 @@ var arsEquivOf = /* @__PURE__ */ __name((g, tcUSD, tcEUR) => {
 // migrar). Al cerrar el mes vuelve activo solo, porque cerrarMes reinserta los fijos con
 // estado "Pendiente".
 var esPausado = /* @__PURE__ */ __name((g) => g && g.estado === "Pausado", "esPausado");
+// "12/12": este mes se paga la ultima. Al cerrar, el gasto NO pasa al mes nuevo.
+// Solo cuenta si el total es valido (>0): una cuota mal escrita no hace desaparecer nada.
+var cuotaTermina = /* @__PURE__ */ __name((cuota) => {
+  if (!cuota || !String(cuota).includes("/")) return false;
+  const p = String(cuota).split("/");
+  const ca = parseInt(p[0]) || 0, ct = parseInt(p[1]) || 0;
+  return ct > 0 && ca >= ct;
+}, "cuotaTermina");
 var rowToGasto = /* @__PURE__ */ __name((r, tcUSD, tcEUR) => ({
   row: r.id,
   fecha: r.fecha,
@@ -468,7 +476,22 @@ async function previewCierreMes(db) {
   const data = rows.map((r) => rowToGasto(r, tcUSD, tcEUR));
   let totalGastos = 0, gastosNUBI = 0, gastosUSD_USD = 0, gastosOtros = 0;
   let fijosPasan = 0, variablesBorran = 0, cuotasAvanzan = 0, cuotasTerminan = 0;
+  const terminanNombres = [];
   for (const g of data) {
+    // Fijos y cuotas se cuentan ANTES de saltear pausados: un pausado tambien pasa (o
+    // termina) al cerrar el mes.
+    const tieneCuota = g.cuota && g.cuota.includes("/");
+    if (tieneCuota && cuotaTermina(g.cuota)) {
+      cuotasTerminan++;
+      terminanNombres.push(`${g.motivo} (${g.cuota})`);
+    } else {
+      if (tieneCuota && (parseInt(g.cuota.split("/")[1]) || 0) > 0)
+        cuotasAvanzan++;
+      if (g.tipo === "Fijo")
+        fijosPasan++;
+    }
+    if (g.tipo !== "Fijo")
+      variablesBorran++;
     // El preview tiene que mostrar lo que REALMENTE se va a cerrar.
     if (esPausado(g)) continue;
     totalGastos += g.arsEquiv;
@@ -478,18 +501,6 @@ async function previewCierreMes(db) {
       gastosUSD_USD += g.moneda === "USD" ? g.montoExt : g.arsEquiv / (tcUSD || 1);
     else
       gastosOtros += g.arsEquiv;
-    if (g.tipo === "Fijo")
-      fijosPasan++;
-    else
-      variablesBorran++;
-    if (g.cuota && g.cuota.includes("/")) {
-      const p = g.cuota.split("/");
-      const ca = parseInt(p[0]) || 0, ct = parseInt(p[1]) || 0;
-      if (ca < ct)
-        cuotasAvanzan++;
-      else
-        cuotasTerminan++;
-    }
   }
   return {
     totalGastos: Math.round(totalGastos),
@@ -500,6 +511,7 @@ async function previewCierreMes(db) {
     variablesBorran,
     cuotasAvanzan,
     cuotasTerminan,
+    terminanNombres,
     gastosCount: data.length
   };
 }
@@ -554,7 +566,10 @@ async function cerrarMes(db, nuevoMes, nuevoAnio, nuevaFechaCierre) {
       const ca = parseInt(p[0]) || 0, ct = parseInt(p[1]) || 0;
       cuotaNueva = ca < ct ? `${ca + 1}/${ct}` : "";
     }
-    if (g.tipo === "Fijo") {
+    // Ultima cuota pagada: el gasto se termina, no pasa al mes nuevo. (Antes se reinsertaba
+    // con la cuota vacia y quedaba como un fijo para siempre.) Igual sigue en
+    // idsContabilizados, asi que se borra del mes viejo como cualquier otro.
+    if (g.tipo === "Fijo" && !cuotaTermina(g.cuota)) {
       allGastos.push({
         fecha: nuevaFecha,
         motivo: g.motivo,

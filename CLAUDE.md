@@ -129,6 +129,10 @@ Escribe el resumen en `historico` **y el desglose por categoría en
 `settings.historico_categorias`**, borra los gastos que contabilizó y reinserta **solo los de
 tipo `Fijo`**, con la fecha reescrita a `01/MM/AAAA` del mes nuevo y estado `Pendiente` (las
 cuotas avanzan `n/total`, **también las de un gasto pausado**). Los `Variable` se descartan.
+**Una cuota en su última (`12/12`) termina: el gasto NO pasa al mes nuevo** (helper `cuotaTermina`;
+el preview del cierre las nombra como "se eliminan"). Hasta oct-2026 se reinsertaba con la cuota
+vacía y quedaba como un fijo eterno —bug heredado del Apps Script—. Una cuota mal escrita (`0/0`)
+no cuenta como terminada: el gasto pasa igual, para no hacer desaparecer nada por un typo.
 Los gastos **pausados no suman** ni al histórico ni al desglose.
 
 > **El detalle de cada mes cerrado se pierde para siempre.** Conviene exportar el CSV antes
@@ -253,7 +257,7 @@ Ingresos, Gastos, Margen y % Variable siempre, y las categorías prendidas. Reem
   (ver la sección del SW más abajo)
 - [tools/check-worker.mjs](tools/check-worker.mjs) — guardrail `npm run check:worker`
 - [tools/test-gasto-pausado.mjs](tools/test-gasto-pausado.mjs) — pausa + cierre + desglose,
-  sobre el código REAL de `worker.js` (21 pruebas). Correr antes de tocar `cerrarMes`
+  sobre el código REAL de `worker.js` (31 pruebas). Correr antes de tocar `cerrarMes`
 - `tools/local/test-importador-tarjeta.mjs` — importador del resumen de tarjeta contra el Excel
   REAL del usuario. **No está versionado a propósito** (`tools/local/` está en `.gitignore`):
   usa sus gastos y montos reales, y **el repo es público**. Vive solo en su PC.
