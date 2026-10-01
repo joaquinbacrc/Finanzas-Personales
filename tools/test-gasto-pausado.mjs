@@ -25,7 +25,7 @@ const preludio = [
   "const num = (v) => { if (v == null || v === '') return 0; const n = Number(v); return isNaN(n) ? 0 : n; };",
   'let __settings = { tc_usd: "1500", tc_eur: "1600", titulo: "FIN Septiembre 2026", cierre_tarjeta: "", tenencia_usd: "0" };',
   'let __ingresosRows = [{ id: 1, monto: 1000000 }, { id: 2, monto: 500000 }, { id: 3, monto: 200000 }];',
-  'let __gastos = []; let __insertados = []; let __borrados = []; let __setts = {};',
+  'let __gastos = []; let __insertados = []; let __borrados = []; let __setts = {}; let __ingUpd = {};',
   'const setSettingValue = async (db, k, v) => { __settings[k] = v; };',
   '',
 ].join('\n');
@@ -37,6 +37,7 @@ const epilogo = [
   'export const __ins = () => __insertados;',
   'export const __borr = () => __borrados;',
   'export const __settsGuardados = () => __setts;',
+  'export const __ingresosGuardados = () => __ingUpd;',
   'export const __db = {',
   '  prepare: (sql) => ({',
   '    all: async () => {',
@@ -55,6 +56,7 @@ const epilogo = [
   '    for (const s of stmts || []) {',
   '      if (s && /INSERT INTO gastos/i.test(s.sql || "")) __insertados.push(s.a);',
   '      if (s && /INSERT INTO settings/i.test(s.sql || "")) __setts[s.a[0]] = s.a[1];',
+  '      if (s && /UPDATE ingresos/i.test(s.sql || "")) __ingUpd[(s.sql.match(/id = (\\d)/) || [])[1]] = s.a[0];',
   '    }',
   '    return [];',
   '  },',
@@ -183,6 +185,19 @@ ok(mot7.length === 3 && mot7.includes('Notebook') && mot7.includes('Alquiler') &
    'pasan los otros 3; una cuota mal escrita no hace desaparecer el gasto');
 ok(W.__ins().find((a) => a[1] === 'Notebook')[7] === '6/12', 'la 5/12 avanza a 6/12');
 ok(W.__borr().length === 5, 'se borran los 5 del mes viejo', String(W.__borr().length));
+
+console.log('\n=== 8. el saldo nuevo de cada billetera ES el sobrante (sin sumar dos veces) ===');
+// Ingresos del stub: sueldo 1.000.000, MP 500.000, NUBI 200.000.
+W.__set([
+  G(1, 'Alquiler', 900000, 'Fijo', 'VISA 5278'),
+  G(2, 'Gimnasio', 50000, 'Fijo', 'NUBI'),
+]);
+const res8 = await W.cerrarMes(W.__db, 'Octubre', 2026, '');
+const iu = W.__ingresosGuardados();
+ok(res8.sobranteMP === 600000, 'sobrante MP = 1.000.000 + 500.000 - 900.000 = 600.000', String(res8.sobranteMP));
+ok(iu['2'] === 600000, 'MP queda en 600.000, NO en 1.100.000 (500.000 contado dos veces)', String(iu['2']));
+ok(iu['3'] === 150000, 'NUBI queda en 150.000, NO en 350.000', String(iu['3']));
+ok(iu['2'] === res8.sobranteMP && iu['3'] === res8.sobranteNUBI, 'lo guardado coincide con lo que muestra el aviso');
 
 fs.unlinkSync(tmp);
 console.log('\n' + (fallas ? '*** ' + fallas + ' FALLAS ***' : 'TODAS LAS PRUEBAS PASAN'));

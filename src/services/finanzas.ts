@@ -472,8 +472,9 @@ export function cerrarMes(nuevoMes: string, nuevoAnio: string | number, nuevaFec
     `);
     for (const g of allGastos) ins.run(g);
 
-    db.prepare(`UPDATE ingresos SET monto = ? WHERE id = 2`).run(Math.round(mp + sobranteMP));
-    db.prepare(`UPDATE ingresos SET monto = ? WHERE id = 3`).run(Math.round(nubi + sobranteNUBI));
+    // El saldo que queda ES el sobrante (ya incluye el saldo anterior). Antes se sumaba dos veces.
+    db.prepare(`UPDATE ingresos SET monto = ? WHERE id = 2`).run(Math.round(sobranteMP));
+    db.prepare(`UPDATE ingresos SET monto = ? WHERE id = 3`).run(Math.round(sobranteNUBI));
     setSettingValue('tenencia_usd', String(Math.round(sobranteUSD * 100) / 100));
     setSettingValue('titulo', `${TITULO_PREFIJO}${nuevoMes} ${nuevoAnio}`);
     // Desglose por categoría del mes que se cierra (historico guarda solo 7 números).

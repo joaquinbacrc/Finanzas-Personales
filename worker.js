@@ -626,8 +626,11 @@ async function cerrarMes(db, nuevoMes, nuevoAnio, nuevaFechaCierre) {
     g.estado,
     g.notas
   ));
-  const updMP = db.prepare(`UPDATE ingresos SET monto = ? WHERE id = 2`).bind(Math.round(mp + sobranteMP));
-  const updNUBI = db.prepare(`UPDATE ingresos SET monto = ? WHERE id = 3`).bind(Math.round(nubi + sobranteNUBI));
+  // El saldo que queda en cada billetera ES el sobrante: sobranteMP ya es (sueldo + MP) - gastos
+  // y sobranteNUBI ya es NUBI - gastos. Antes se hacia `mp + sobranteMP` (heredado del Apps
+  // Script) y el saldo anterior se sumaba DOS veces: cada cierre inflaba MP y NUBI.
+  const updMP = db.prepare(`UPDATE ingresos SET monto = ? WHERE id = 2`).bind(Math.round(sobranteMP));
+  const updNUBI = db.prepare(`UPDATE ingresos SET monto = ? WHERE id = 3`).bind(Math.round(sobranteNUBI));
   const upsertSetting = /* @__PURE__ */ __name((key, value) => db.prepare(`
     INSERT INTO settings (key, value) VALUES (?, ?)
     ON CONFLICT(key) DO UPDATE SET value = excluded.value

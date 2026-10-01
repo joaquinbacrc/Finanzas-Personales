@@ -134,6 +134,10 @@ el preview del cierre las nombra como "se eliminan"). Hasta oct-2026 se reinsert
 vacía y quedaba como un fijo eterno —bug heredado del Apps Script—. Una cuota mal escrita (`0/0`)
 no cuenta como terminada: el gasto pasa igual, para no hacer desaparecer nada por un typo.
 Los gastos **pausados no suman** ni al histórico ni al desglose.
+**Saldos que quedan:** MP queda en `sobranteMP` (= sueldo + MP − gastos) y NUBI en `sobranteNUBI`
+(= NUBI − gastos NUBI), **tal cual**. Hasta oct-2026 se guardaba `mp + sobranteMP` (bug heredado del
+Apps Script): el saldo anterior se sumaba dos veces e inflaba MP y NUBI en cada cierre, y el
+usuario lo corregía a mano. Caja USD siempre estuvo bien.
 
 > **El detalle de cada mes cerrado se pierde para siempre.** Conviene exportar el CSV antes
 > (Config → Exportar a CSV, o el botón "CSV" en el header de Resumen).
@@ -257,7 +261,7 @@ Ingresos, Gastos, Margen y % Variable siempre, y las categorías prendidas. Reem
   (ver la sección del SW más abajo)
 - [tools/check-worker.mjs](tools/check-worker.mjs) — guardrail `npm run check:worker`
 - [tools/test-gasto-pausado.mjs](tools/test-gasto-pausado.mjs) — pausa + cierre + desglose,
-  sobre el código REAL de `worker.js` (31 pruebas). Correr antes de tocar `cerrarMes`
+  sobre el código REAL de `worker.js` (35 pruebas). Correr antes de tocar `cerrarMes`
 - `tools/local/test-importador-tarjeta.mjs` — importador del resumen de tarjeta contra el Excel
   REAL del usuario. **No está versionado a propósito** (`tools/local/` está en `.gitignore`):
   usa sus gastos y montos reales, y **el repo es público**. Vive solo en su PC.
